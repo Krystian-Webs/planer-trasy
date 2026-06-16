@@ -67,6 +67,9 @@
   .stop .inwrap .fld{flex:1}
   .stop .rm{border:1px solid var(--line);background:var(--panel-2);color:var(--ink-dim);border-radius:8px;width:42px;font-size:16px;cursor:pointer;flex:none}
   .stop .rm:hover{color:#e23b4e;border-color:#e23b4e}
+  .stop .mv{border:1px solid var(--line);background:var(--panel-2);color:var(--ink-dim);border-radius:8px;width:34px;font-size:15px;cursor:pointer;flex:none}
+  .stop .mv:disabled{opacity:.3;cursor:default}
+  .stop .mv:hover:not(:disabled){color:var(--accent);border-color:var(--accent)}
   .ac{position:absolute;left:0;right:0;top:100%;margin-top:4px;background:var(--panel);border:1px solid var(--line);border-radius:9px;overflow:hidden;z-index:50;box-shadow:0 8px 24px #0008;display:none}
   .ac.show{display:block}
   .ac .res,#searchResults .res{padding:10px 12px;font-size:12.5px;cursor:pointer;border-bottom:1px solid var(--line);display:flex;gap:8px}
@@ -226,6 +229,11 @@
         <p class="hint">Pobiera wysokość terenu wzdłuż trasy i pokazuje podbiegi/zbiegi. Przelicz ponownie po zmianie trasy.</p>
       </div>
       <div class="group">
+        <div class="lbl">Widok 3D terenu</div>
+        <button class="btn" id="threeBtn">🌄 Pokaż trasę w 3D</button>
+        <p class="hint">Obracana mapa z ukształtowaniem terenu i Twoją trasą. Na telefonie obracasz i pochylasz dwoma palcami; na komputerze prawym przyciskiem myszy.</p>
+      </div>
+      <div class="group">
         <div class="lbl">Eksport</div>
         <button class="btn primary" id="gpxBtn" disabled>⬇ Pobierz plik GPX</button>
         <p class="hint">GPX wczytasz do zegarka, aplikacji dla zawodników lub przekażesz służbom.</p>
@@ -234,6 +242,10 @@
   </aside>
   <div id="toast"></div>
   <div id="acFloat" class="acfloat"></div>
+  <div id="threeOverlay" style="display:none;position:fixed;inset:0;z-index:5000;background:#000">
+    <div id="threeMap" style="position:absolute;inset:0"></div>
+    <button id="threeClose" style="position:absolute;top:14px;left:14px;z-index:5001;background:#1b2128;color:#fff;border:1px solid #323c47;border-radius:10px;padding:11px 15px;font-weight:700;cursor:pointer">✕ Zamknij 3D</button>
+  </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
@@ -289,7 +301,8 @@ function removeStop(id){const s=stops.find(x=>x.id===id);if(s&&s.marker)map.remo
 function renumberStops(){let n=0;stops.forEach(s=>{if(s.marker){n++;s.marker.setIcon(waypointIcon(n));}});}
 function ensureEndpoints(){while(stops.length<2)stops.push({id:idSeq++,latlng:null,address:"",marker:null});}
 function clearStop(s){if(s.marker){map.removeLayer(s.marker);s.marker=null;}s.latlng=null;s.address="";renderStops();rebuildRoute();}
-function renderStops(){const wrap=$("stopsList");wrap.innerHTML="";ensureEndpoints();stops.forEach((s,i)=>{const[lab,col]=stopLabel(i);const isEnd=(i===0||i===stops.length-1);const row=document.createElement("div");row.className="stop";row.innerHTML=`<div class="slabel"><span class="dotc" style="background:${col}"></span>${lab}</div><div class="inwrap"><input class="fld" type="text" placeholder="Wpisz adres lub miejsce…" value="${(s.address||"").replace(/"/g,"&quot;")}"><button class="rm" title="${isEnd?"Wyczyść":"Usuń przystanek"}">${isEnd?"⌫":"✕"}</button></div>`;const input=row.querySelector("input");row.querySelector(".rm").onclick=()=>{if(isEnd)clearStop(s);else removeStop(s.id);};attachAutocomplete(input,it=>{const ll=L.latLng(it.lat,it.lon);s.latlng=ll;s.address=it.main;if(s.marker)s.marker.setLatLng(ll);else makeStopMarker(s);input.value=s.address;renderStops();map.setView(ll,15);rebuildRoute();});wrap.appendChild(row);});renumberStops();}
+function renderStops(){const wrap=$("stopsList");wrap.innerHTML="";ensureEndpoints();stops.forEach((s,i)=>{const[lab,col]=stopLabel(i);const isEnd=(i===0||i===stops.length-1);const row=document.createElement("div");row.className="stop";row.innerHTML=`<div class="slabel"><span class="dotc" style="background:${col}"></span>${lab}</div><div class="inwrap"><input class="fld" type="text" placeholder="Wpisz adres lub miejsce…" value="${(s.address||"").replace(/"/g,"&quot;")}"><button class="mv up" title="Wyżej">↑</button><button class="mv dn" title="Niżej">↓</button><button class="rm" title="${isEnd?"Wyczyść":"Usuń przystanek"}">${isEnd?"⌫":"✕"}</button></div>`;const input=row.querySelector("input"),up=row.querySelector(".up"),dn=row.querySelector(".dn");up.disabled=(i===0);dn.disabled=(i===stops.length-1);up.onclick=()=>moveStop(i,-1);dn.onclick=()=>moveStop(i,1);row.querySelector(".rm").onclick=()=>{if(isEnd)clearStop(s);else removeStop(s.id);};attachAutocomplete(input,it=>{const ll=L.latLng(it.lat,it.lon);s.latlng=ll;s.address=it.main;if(s.marker)s.marker.setLatLng(ll);else makeStopMarker(s);input.value=s.address;renderStops();map.setView(ll,15);rebuildRoute();});wrap.appendChild(row);});renumberStops();}
+function moveStop(i,dir){const j=i+dir;if(j<0||j>=stops.length)return;const t=stops[i];stops[i]=stops[j];stops[j]=t;renderStops();rebuildRoute();}
 async function placeRouteStop(latlng,address){ensureEndpoints();let s;if(!stops[0].latlng)s=stops[0];else if(!stops[stops.length-1].latlng)s=stops[stops.length-1];else{s={id:idSeq++,latlng:null,address:"",marker:null};stops.splice(stops.length-1,0,s);}s.latlng=latlng;if(s.marker)s.marker.setLatLng(latlng);else makeStopMarker(s);s.address=address||await reverseGeocode(latlng);renderStops();rebuildRoute();}
 
 async function fetchRoute(coords){
@@ -466,6 +479,44 @@ function drawElevation(data,asc,desc,minE,maxE){
   $("elevWrap").style.display="block";
 }
 $("elevBtn").onclick=computeElevation;
+
+// ---------- 3D terrain view (MapLibre, lazy-loaded) ----------
+function load3DLibs(){return new Promise((res,rej)=>{if(window.maplibregl)return res();const css=document.createElement("link");css.rel="stylesheet";css.href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css";document.head.appendChild(css);const s=document.createElement("script");s.src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js";s.onload=()=>res();s.onerror=()=>rej();document.head.appendChild(s);});}
+let map3d=null;
+async function open3D(){
+  if(lastGeometry.length<2){toast("Najpierw wyznacz trasę.");return;}
+  const btn=$("threeBtn"),old=btn.textContent;btn.disabled=true;btn.textContent="Ładuję 3D…";
+  try{await load3DLibs();}catch(e){toast("Nie udało się wczytać widoku 3D (sprawdź internet).");btn.textContent=old;btn.disabled=false;return;}
+  btn.textContent=old;btn.disabled=false;
+  $("threeOverlay").style.display="block";
+  const coords=lastGeometry.map(c=>[c[1],c[0]]);
+  if(map3d){map3d.remove();map3d=null;}
+  map3d=new maplibregl.Map({
+    container:"threeMap",
+    style:{version:8,
+      sources:{
+        base:{type:"raster",tiles:["https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png","https://b.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png","https://c.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png"],tileSize:256,attribution:"© OpenStreetMap © CARTO"},
+        dem:{type:"raster-dem",tiles:["https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"],encoding:"terrarium",tileSize:256,maxzoom:14}
+      },
+      layers:[{id:"base",type:"raster",source:"base"}],
+      terrain:{source:"dem",exaggeration:1.6}
+    },
+    center:coords[Math.floor(coords.length/2)],zoom:13,pitch:65,bearing:-17,maxPitch:85
+  });
+  map3d.addControl(new maplibregl.NavigationControl({visualizePitch:true}),"top-right");
+  map3d.on("load",()=>{
+    try{
+      map3d.addSource("route",{type:"geojson",data:{type:"Feature",geometry:{type:"LineString",coordinates:coords}}});
+      map3d.addLayer({id:"route",type:"line",source:"route",layout:{"line-cap":"round","line-join":"round"},paint:{"line-color":"#ff6b1a","line-width":5}});
+      let b=new maplibregl.LngLatBounds(coords[0],coords[0]);coords.forEach(c=>b.extend(c));
+      map3d.fitBounds(b,{padding:70,pitch:65,bearing:-17,duration:0});
+      map3d.setTerrain({source:"dem",exaggeration:1.6});
+    }catch(e){}
+  });
+}
+function close3D(){$("threeOverlay").style.display="none";if(map3d){map3d.remove();map3d=null;}}
+$("threeBtn").onclick=open3D;
+$("threeClose").onclick=close3D;
 
 renderStops();updateStats();searchInfoText();
 loadFromHash();
