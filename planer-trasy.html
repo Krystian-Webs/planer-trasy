@@ -124,6 +124,8 @@
   .estat{flex:1;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:8px;text-align:center}
   .estat .ev{font:800 14px sans-serif;color:var(--accent);font-variant-numeric:tabular-nums}
   .estat .ek{font-size:9px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:.5px;margin-top:2px}
+  .online-chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:20px;padding:3px 10px;font-size:12px;margin:0 6px 6px 0}
+  .online-chip .dotc{width:9px;height:9px;border-radius:50%;flex:none}
   #toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--panel);border:1px solid var(--line);color:var(--ink);padding:12px 18px;border-radius:10px;font-size:13px;opacity:0;pointer-events:none;transition:.2s;z-index:2000;box-shadow:0 8px 30px #0008;max-width:84vw;text-align:center}
   #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
   /* MOBILE: panel becomes a bottom sheet */
@@ -176,6 +178,17 @@
           <button class="btn" id="copyLinkBtn" style="margin-top:6px">📋 Kopiuj link</button>
         </div>
         <p class="hint">Link zawiera cały projekt (trasę, punkty, notatki). Wspólnik otwiera go, widzi i edytuje to samo, a gdy chce odesłać zmiany — tworzy nowy link. Nie wymaga żadnego serwera ani pliku PHP.</p>
+      </div>
+      <div class="group">
+        <div class="lbl">Współpraca na żywo</div>
+        <input id="liveName" type="text" class="fld" placeholder="Twoje imię (widoczne dla wspólnika)" style="margin-bottom:8px">
+        <button class="btn primary" id="liveBtn">🟢 Włącz współpracę na żywo</button>
+        <div id="liveWrap" style="display:none;margin-top:8px">
+          <div id="liveOnline" style="margin-bottom:8px"></div>
+          <input id="liveLink" class="fld" type="text" readonly style="font-size:12px">
+          <button class="btn" id="liveCopyBtn" style="margin-top:6px">📋 Kopiuj link do współpracy</button>
+        </div>
+        <p class="hint">Włącz i wyślij link wspólnikowi — zmiany trasy i punktów widać na żywo u obu osób, a każdy ma swój kolor (jego kursor na mapie i obecność). Wymaga jednorazowej, darmowej konfiguracji Firebase.</p>
       </div>
       <div class="group">
         <div class="lbl">Trasa — wpisz adresy</div>
@@ -266,6 +279,8 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <script>
 const POI={
   checkpoint:{ic:"🔵",label:"Punkt kontrolny",color:"#3da5f4"},
@@ -288,6 +303,15 @@ const baseSat=L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/
 L.control.layers({"Mapa drogowa":baseRoads,"OpenStreetMap":baseOSM,"Satelita":baseSat},null,{position:"topright"}).addTo(map);
 L.control.zoom({position:"topright"}).addTo(map);
 const $=id=>document.getElementById(id);
+// ===== KONFIGURACJA FIREBASE (do współpracy na żywo) =====
+// Wklej tu dane z Twojego darmowego projektu Firebase (instrukcja od asystenta).
+const FIREBASE_CONFIG = {
+  apiKey: "",
+  authDomain: "",
+  databaseURL: "",
+  projectId: ""
+};
+const LIVE_PALETTE=["#ff6b1a","#3da5f4","#33c27a","#9b5de5","#f4b43d","#e23b4e","#16c8c8","#ff7ab6"];
 const toast=m=>{const t=$("toast");t.textContent=m;t.classList.add("show");clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove("show"),2800);};
 
 function waypointIcon(n){return L.divIcon({className:"",iconSize:[24,24],iconAnchor:[12,12],html:`<div style="width:24px;height:24px;border-radius:50%;background:#ff6b1a;color:#fff;border:2px solid #fff;display:flex;align-items:center;justify-content:center;font:700 12px sans-serif;box-shadow:0 1px 4px #0006">${n}</div>`});}
@@ -383,7 +407,7 @@ $("loadBtn").onclick=()=>$("fileInput").click();
 $("fileInput").onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{loadProject(JSON.parse(rd.result));toast("Wczytano projekt ✓");}catch(err){toast("Nie udało się wczytać pliku.");}};rd.readAsText(f);e.target.value="";};
 $("newBtn").onclick=()=>{if((stops.some(s=>s.latlng)||pois.length)&&!confirm("Wyczyścić bieżący projekt?"))return;clearAll();$("projName").value="Moje wydarzenie";toast("Nowy projekt");};
 function clearAll(){stops.forEach(s=>{if(s.marker)map.removeLayer(s.marker);});stops=[];pois.forEach(p=>map.removeLayer(p.marker));pois=[];renderStops();rebuildRoute();}
-async function loadProject(d){stops.forEach(s=>{if(s.marker)map.removeLayer(s.marker);});stops=[];pois.forEach(p=>map.removeLayer(p.marker));pois=[];$("projName").value=d.name||"Wczytany projekt";if(typeof d.snap==="boolean"){snap=d.snap;$("snapToggle").classList.toggle("on",snap);}(d.stops||d.waypoints||[]).forEach(w=>addStop(L.latLng(w.lat,w.lng),w.address||"",true));(d.pois||[]).forEach(p=>{const o=addPoi(p.type,L.latLng(p.lat,p.lng),p.name);if(o)o.note=p.note||"";});renderStops();await rebuildRoute();const all=[...stops.filter(s=>s.latlng).map(s=>s.latlng),...pois.map(p=>p.latlng)];if(all.length)map.fitBounds(L.latLngBounds(all).pad(0.25));}
+async function loadProject(d,keepView){stops.forEach(s=>{if(s.marker)map.removeLayer(s.marker);});stops=[];pois.forEach(p=>map.removeLayer(p.marker));pois=[];$("projName").value=d.name||"Wczytany projekt";if(typeof d.snap==="boolean"){snap=d.snap;$("snapToggle").classList.toggle("on",snap);}(d.stops||d.waypoints||[]).forEach(w=>addStop(L.latLng(w.lat,w.lng),w.address||"",true));(d.pois||[]).forEach(p=>{const o=addPoi(p.type,L.latLng(p.lat,p.lng),p.name);if(o)o.note=p.note||"";});renderStops();await rebuildRoute();if(!keepView){const all=[...stops.filter(s=>s.latlng).map(s=>s.latlng),...pois.map(p=>p.latlng)];if(all.length)map.fitBounds(L.latLngBounds(all).pad(0.25));}}
 
 // ---------- target distance (5 / 10 km / custom) ----------
 let targetKm=null, targetMarker=null;
@@ -543,8 +567,45 @@ function updateTime(){const tv=$("timeVal"),ps=$("paceShow");if(!tv)return;const
 $("paceChips").addEventListener("click",e=>{const b=e.target.closest(".chip");if(!b)return;paceSec=+b.dataset.pace;[...e.currentTarget.children].forEach(c=>c.classList.toggle("on",c===b));$("paceCustom").value=fmtPace(paceSec);updateTime();});
 $("paceSet").onclick=()=>{const v=$("paceCustom").value.trim();let s=null;if(v.indexOf(":")>=0){const p=v.split(":");s=(parseInt(p[0])||0)*60+(parseInt(p[1])||0);}else{s=Math.round(parseFloat(v.replace(",","."))*60);}if(s&&s>0){paceSec=s;[...$("paceChips").children].forEach(c=>c.classList.remove("on"));updateTime();toast("Tempo: "+fmtPace(paceSec)+" min/km");}};
 
+// ---------- live collaboration (Firebase) ----------
+let live=false,fdb=null,roomRef=null,presRef=null,myPresRef=null,clientId=Math.random().toString(36).slice(2,9),myColor=null,lastSentJSON="",applyingRemote=false,cursorLayer=null,presenceData={},cursorThrottle=0;
+function getRoom(){const m=(location.hash||"").match(/room=([a-z0-9]+)/i);return m?m[1]:null;}
+function renderPresence(){
+  const chips=$("liveOnline");if(chips){chips.innerHTML="";Object.entries(presenceData).forEach(([id,p])=>{if(!p)return;const el=document.createElement("span");el.className="online-chip";el.innerHTML=`<span class="dotc" style="background:${p.color}"></span>${(id===clientId?(p.name||"Ty")+" (Ty)":(p.name||"Gość")).replace(/</g,"&lt;")}`;chips.appendChild(el);});}
+  if(!cursorLayer)return;cursorLayer.clearLayers();const now=Date.now();
+  Object.entries(presenceData).forEach(([id,p])=>{if(id===clientId||!p||p.cx==null)return;if(now-(p.t||0)>15000)return;L.marker([p.cy,p.cx],{icon:L.divIcon({className:"",iconSize:null,html:`<div style="transform:translate(-4px,-4px)"><div style="width:14px;height:14px;border-radius:50%;background:${p.color};border:2px solid #fff;box-shadow:0 1px 4px #0008"></div><div style="margin-top:2px;background:${p.color};color:#fff;font:700 10px sans-serif;padding:1px 6px;border-radius:6px;white-space:nowrap;box-shadow:0 1px 4px #0006">${(p.name||"Gość").replace(/</g,"&lt;")}</div></div>`}),interactive:false}).addTo(cursorLayer);});
+}
+function liveCursorMove(e){const now=Date.now();if(now-cursorThrottle<120||!myPresRef)return;cursorThrottle=now;myPresRef.update({cx:e.latlng.lng,cy:e.latlng.lat,t:now});}
+async function startLive(){
+  if(live)return;
+  if(!FIREBASE_CONFIG.apiKey){alert("Aby włączyć współpracę na żywo, trzeba najpierw raz skonfigurować darmowy Firebase i wkleić dane do pliku. Poproś asystenta o instrukcję.");return;}
+  try{if(typeof firebase==="undefined")throw 0;if(!firebase.apps.length)firebase.initializeApp(FIREBASE_CONFIG);fdb=firebase.database();}catch(e){toast("Nie udało się połączyć z Firebase.");return;}
+  let room=getRoom();if(!room){room=Math.random().toString(36).slice(2,10);location.hash="room="+room;}
+  myColor=LIVE_PALETTE[Math.floor(Math.random()*LIVE_PALETTE.length)];
+  const myName=($("liveName").value||"Gość").slice(0,20);
+  roomRef=fdb.ref("rooms/"+room+"/project");
+  presRef=fdb.ref("rooms/"+room+"/presence");
+  myPresRef=presRef.child(clientId);
+  myPresRef.set({name:myName,color:myColor,t:Date.now()});
+  myPresRef.onDisconnect().remove();
+  cursorLayer=L.layerGroup().addTo(map);
+  map.on("mousemove",liveCursorMove);
+  roomRef.once("value").then(snap=>{const d=snap.val();if(d){applyingRemote=true;loadProject(d,true).then(()=>{applyingRemote=false;lastSentJSON=JSON.stringify(serialize());});}else{lastSentJSON=JSON.stringify(serialize());roomRef.set(serialize());}});
+  roomRef.on("value",snap=>{const d=snap.val();if(!d)return;const js=JSON.stringify(d);if(js===lastSentJSON)return;applyingRemote=true;loadProject(d,true).then(()=>{applyingRemote=false;lastSentJSON=js;});});
+  presRef.on("value",snap=>{presenceData=snap.val()||{};renderPresence();});
+  setInterval(()=>{if(!live||applyingRemote)return;const js=JSON.stringify(serialize());if(js!==lastSentJSON){lastSentJSON=js;if(roomRef)roomRef.set(serialize());}},1500);
+  live=true;
+  $("liveBtn").textContent="🟢 Współpraca aktywna";
+  $("liveLink").value=location.origin+location.pathname+"#room="+room;
+  $("liveWrap").style.display="block";
+  toast("Współpraca włączona — wyślij link wspólnikowi.");
+}
+$("liveBtn").onclick=startLive;
+$("liveCopyBtn").onclick=async()=>{const i=$("liveLink");i.select();try{await navigator.clipboard.writeText(i.value);}catch(e){}toast("Skopiowano link.");};
+
 renderStops();updateStats();searchInfoText();
 loadFromHash();
+if(getRoom()&&FIREBASE_CONFIG.apiKey)startLive();
 
 // ---------- PWA: instalacja jako aplikacja ----------
 $("refreshBtn").onclick=async()=>{
