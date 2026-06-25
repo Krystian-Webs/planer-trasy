@@ -306,10 +306,13 @@ const $=id=>document.getElementById(id);
 // ===== KONFIGURACJA FIREBASE (do współpracy na żywo) =====
 // Wklej tu dane z Twojego darmowego projektu Firebase (instrukcja od asystenta).
 const FIREBASE_CONFIG = {
-  apiKey: "",
-  authDomain: "",
-  databaseURL: "",
-  projectId: ""
+  apiKey: "AIzaSyC0tshqAwilkhwDsaLJEllQV2jYcYbxiRM",
+  authDomain: "planer-trasy.firebaseapp.com",
+  databaseURL: "https://planer-trasy-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "planer-trasy",
+  storageBucket: "planer-trasy.firebasestorage.app",
+  messagingSenderId: "135831786286",
+  appId: "1:135831786286:web:436ada01c7b7dcb0b9e0bf"
 };
 const LIVE_PALETTE=["#ff6b1a","#3da5f4","#33c27a","#9b5de5","#f4b43d","#e23b4e","#16c8c8","#ff7ab6"];
 const toast=m=>{const t=$("toast");t.textContent=m;t.classList.add("show");clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove("show"),2800);};
