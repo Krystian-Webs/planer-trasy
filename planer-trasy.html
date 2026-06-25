@@ -143,7 +143,7 @@
     <div class="modeseg" id="modeSeg"><button data-m="route" class="on">✏️ Rysuj trasę</button><button data-m="poi">📍 Stawiaj punkty</button></div>
     <div id="searchBox"><span class="ico">🔍</span><input id="searchInput" type="text" placeholder="Szukaj miejsca, by postawić punkt…" autocomplete="off"><span class="spin" id="searchSpin"></span></div>
     <div id="searchInfo"></div>
-    <div id="distBadge" class="distbadge">📏 Trasa: 0,00 km</div>
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><div id="distBadge" class="distbadge">📏 Trasa: 0,00 km</div><button id="fitBtn" class="distbadge" style="cursor:pointer;border:none">🔍 Pokaż całą trasę</button></div>
     <div id="searchResults"></div>
   </div>
 
@@ -370,7 +370,7 @@ async function fetchRoute(coords){
   toast("Silniki trasy chwilowo niedostępne — linia prosta. Spróbuj ponownie.");
   return null;
 }
-async function rebuildRoute(){if(routeLine){map.removeLayer(routeLine);routeLine=null;}if(routeHit){map.removeLayer(routeHit);routeHit=null;}lastGeometry=[];totalMeters=0;const coords=stops.filter(s=>s.latlng).map(s=>s.latlng);if(coords.length>=1){if(snap&&coords.length>=2){const res=await fetchRoute(coords);if(res){totalMeters=res.meters;lastGeometry=res.geometry;}}if(lastGeometry.length===0){lastGeometry=coords.map(c=>[c.lat,c.lng]);for(let i=1;i<coords.length;i++)totalMeters+=haversine(coords[i-1],coords[i]);}if(lastGeometry.length>=2){routeLine=L.polyline(lastGeometry,{color:"#ff6b1a",weight:5,opacity:.9,lineJoin:"round"}).addTo(map);routeLine.bringToBack();routeHit=L.polyline(lastGeometry,{color:"#ff6b1a",weight:22,opacity:0}).addTo(map);routeHit._path&&(routeHit._path.style.cursor="copy");routeHit.on("click",e=>{L.DomEvent.stop(e);insertStopOnLine(e.latlng);});}}drawKmMarkers();renderPoiList();updateStats();updateTarget();}
+async function rebuildRoute(){if(routeLine){map.removeLayer(routeLine);routeLine=null;}if(routeHit){map.removeLayer(routeHit);routeHit=null;}lastGeometry=[];totalMeters=0;const coords=stops.filter(s=>s.latlng).map(s=>s.latlng);if(coords.length>=1){if(snap&&coords.length>=2){const res=await fetchRoute(coords);if(res){totalMeters=res.meters;lastGeometry=res.geometry;}}if(lastGeometry.length===0){lastGeometry=coords.map(c=>[c.lat,c.lng]);for(let i=1;i<coords.length;i++)totalMeters+=haversine(coords[i-1],coords[i]);}if(lastGeometry.length>=2){routeLine=L.polyline(lastGeometry,{color:"#ff6b1a",weight:5,opacity:.9,lineJoin:"round"}).addTo(map);routeLine.bringToBack();routeLine._path&&(routeLine._path.style.cursor="copy");}}drawKmMarkers();renderPoiList();updateStats();updateTarget();}
 async function insertStopOnLine(latlng){
   const k=kmAlong(latlng);if(k==null){placeRouteStop(latlng);return;}
   let insertIdx=-1;
@@ -397,7 +397,9 @@ function openTypeChooser(latlng){
   box.appendChild(grid);
   L.popup({minWidth:240,closeButton:true}).setLatLng(latlng).setContent(box).openOn(map);
 }
-map.on("click",e=>{if(mode==="route")placeRouteStop(e.latlng);else openTypeChooser(e.latlng);});
+function pxPtSeg(p,a,b){const dx=b.x-a.x,dy=b.y-a.y;const len=dx*dx+dy*dy;let t=len?((p.x-a.x)*dx+(p.y-a.y)*dy)/len:0;t=Math.max(0,Math.min(1,t));const qx=a.x+t*dx,qy=a.y+t*dy;return Math.hypot(p.x-qx,p.y-qy);}
+function pxDistToRoute(latlng){if(lastGeometry.length<2)return Infinity;const p=map.latLngToContainerPoint(latlng);let best=Infinity;for(let i=1;i<lastGeometry.length;i++){const a=map.latLngToContainerPoint(L.latLng(lastGeometry[i-1][0],lastGeometry[i-1][1]));const b=map.latLngToContainerPoint(L.latLng(lastGeometry[i][0],lastGeometry[i][1]));const d=pxPtSeg(p,a,b);if(d<best)best=d;}return best;}
+map.on("click",e=>{if(mode==="route"){if(stops.filter(s=>s.latlng).length>=2&&pxDistToRoute(e.latlng)<18)insertStopOnLine(e.latlng);else placeRouteStop(e.latlng);}else openTypeChooser(e.latlng);});
 
 $("distribBtn").onclick=()=>{if(lastGeometry.length<2){toast("Najpierw wyznacz trasę.");return;}const every=parseFloat($("cpEvery").value)*1000;if(!every||every<50){toast("Podaj odstęp większy niż 0,05 km.");return;}let added=0;for(let d=every;d<totalMeters;d+=every){addPoi("checkpoint",pointAtMeters(d));added++;}toast(added?`Rozmieszczono ${added} punktów kontrolnych`:"Trasa za krótka dla tego odstępu");};
 $("addStopBtn").onclick=()=>{setMode("route");ensureEndpoints();const s={id:idSeq++,latlng:null,address:"",marker:null};stops.splice(stops.length-1,0,s);renderStops();const ins=document.querySelectorAll("#stopsList input");if(ins.length>=2)ins[ins.length-2].focus();};
@@ -422,7 +424,8 @@ $("loadBtn").onclick=()=>$("fileInput").click();
 $("fileInput").onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{loadProject(JSON.parse(rd.result));toast("Wczytano projekt ✓");}catch(err){toast("Nie udało się wczytać pliku.");}};rd.readAsText(f);e.target.value="";};
 $("newBtn").onclick=()=>{if((stops.some(s=>s.latlng)||pois.length)&&!confirm("Wyczyścić bieżący projekt?"))return;clearAll();$("projName").value="Moje wydarzenie";toast("Nowy projekt");};
 function clearAll(){stops.forEach(s=>{if(s.marker)map.removeLayer(s.marker);});stops=[];pois.forEach(p=>map.removeLayer(p.marker));pois=[];renderStops();rebuildRoute();}
-async function loadProject(d,keepView){stops.forEach(s=>{if(s.marker)map.removeLayer(s.marker);});stops=[];pois.forEach(p=>map.removeLayer(p.marker));pois=[];$("projName").value=d.name||"Wczytany projekt";if(typeof d.snap==="boolean"){snap=d.snap;$("snapToggle").classList.toggle("on",snap);}(d.stops||d.waypoints||[]).forEach(w=>addStop(L.latLng(w.lat,w.lng),w.address||"",true));(d.pois||[]).forEach(p=>{const o=addPoi(p.type,L.latLng(p.lat,p.lng),p.name);if(o)o.note=p.note||"";});renderStops();await rebuildRoute();if(!keepView){const all=[...stops.filter(s=>s.latlng).map(s=>s.latlng),...pois.map(p=>p.latlng)];if(all.length)map.fitBounds(L.latLngBounds(all).pad(0.25));}}
+function fitToRoute(){const all=[...stops.filter(s=>s.latlng).map(s=>s.latlng),...pois.map(p=>p.latlng)];if(!all.length){toast("Brak punktów na trasie.");return;}map.invalidateSize();const b=L.latLngBounds(all).pad(0.25);if(all.length===1)map.setView(all[0],15);else map.fitBounds(b);}
+async function loadProject(d,keepView){stops.forEach(s=>{if(s.marker)map.removeLayer(s.marker);});stops=[];pois.forEach(p=>map.removeLayer(p.marker));pois=[];$("projName").value=d.name||"Wczytany projekt";if(typeof d.snap==="boolean"){snap=d.snap;$("snapToggle").classList.toggle("on",snap);}(d.stops||d.waypoints||[]).forEach(w=>addStop(L.latLng(w.lat,w.lng),w.address||"",true));(d.pois||[]).forEach(p=>{const o=addPoi(p.type,L.latLng(p.lat,p.lng),p.name);if(o)o.note=p.note||"";});renderStops();await rebuildRoute();if(!keepView){fitToRoute();setTimeout(fitToRoute,250);}}
 
 // ---------- target distance (5 / 10 km / custom) ----------
 let targetKm=null, targetMarker=null;
@@ -639,6 +642,7 @@ $("liveBtn").onclick=startLive;
 $("liveCopyBtn").onclick=async()=>{const i=$("liveLink");i.select();try{await navigator.clipboard.writeText(i.value);}catch(e){}toast("Skopiowano link.");};
 
 renderStops();updateStats();searchInfoText();
+$("fitBtn").onclick=fitToRoute;
 try{const savedName=localStorage.getItem("planer_name");if(savedName&&$("liveName"))$("liveName").value=savedName;}catch(e){}
 loadFromHash();
 if(getRoom()&&FIREBASE_CONFIG.apiKey)startLive();
