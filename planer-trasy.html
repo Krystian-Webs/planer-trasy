@@ -295,7 +295,7 @@ const POI={
   poi:{ic:"⭐",label:"Punkt",color:"#ff6b1a"}
 };
 let mode="route", poiType="checkpoint", snap=true, showKm=false;
-let stops=[], pois=[], routeLine=null, kmLayer=null, idSeq=1, lastGeometry=[], totalMeters=0;
+let stops=[], pois=[], routeLine=null, routeHit=null, kmLayer=null, idSeq=1, lastGeometry=[], totalMeters=0;
 
 const map=L.map("map",{zoomControl:false}).setView([52.2297,21.0122],13);
 const baseRoads=L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",{maxZoom:20,subdomains:"abcd",attribution:"&copy; OpenStreetMap &copy; CARTO"}).addTo(map);
@@ -370,7 +370,18 @@ async function fetchRoute(coords){
   toast("Silniki trasy chwilowo niedostępne — linia prosta. Spróbuj ponownie.");
   return null;
 }
-async function rebuildRoute(){if(routeLine){map.removeLayer(routeLine);routeLine=null;}lastGeometry=[];totalMeters=0;const coords=stops.filter(s=>s.latlng).map(s=>s.latlng);if(coords.length>=1){if(snap&&coords.length>=2){const res=await fetchRoute(coords);if(res){totalMeters=res.meters;lastGeometry=res.geometry;}}if(lastGeometry.length===0){lastGeometry=coords.map(c=>[c.lat,c.lng]);for(let i=1;i<coords.length;i++)totalMeters+=haversine(coords[i-1],coords[i]);}if(lastGeometry.length>=2){routeLine=L.polyline(lastGeometry,{color:"#ff6b1a",weight:5,opacity:.9,lineJoin:"round"}).addTo(map);routeLine.bringToBack();}}drawKmMarkers();renderPoiList();updateStats();updateTarget();}
+async function rebuildRoute(){if(routeLine){map.removeLayer(routeLine);routeLine=null;}if(routeHit){map.removeLayer(routeHit);routeHit=null;}lastGeometry=[];totalMeters=0;const coords=stops.filter(s=>s.latlng).map(s=>s.latlng);if(coords.length>=1){if(snap&&coords.length>=2){const res=await fetchRoute(coords);if(res){totalMeters=res.meters;lastGeometry=res.geometry;}}if(lastGeometry.length===0){lastGeometry=coords.map(c=>[c.lat,c.lng]);for(let i=1;i<coords.length;i++)totalMeters+=haversine(coords[i-1],coords[i]);}if(lastGeometry.length>=2){routeLine=L.polyline(lastGeometry,{color:"#ff6b1a",weight:5,opacity:.9,lineJoin:"round"}).addTo(map);routeLine.bringToBack();routeHit=L.polyline(lastGeometry,{color:"#ff6b1a",weight:22,opacity:0}).addTo(map);routeHit._path&&(routeHit._path.style.cursor="copy");routeHit.on("click",e=>{L.DomEvent.stop(e);insertStopOnLine(e.latlng);});}}drawKmMarkers();renderPoiList();updateStats();updateTarget();}
+async function insertStopOnLine(latlng){
+  const k=kmAlong(latlng);if(k==null){placeRouteStop(latlng);return;}
+  let insertIdx=-1;
+  for(let i=0;i<stops.length;i++){if(!stops[i].latlng)continue;const ki=kmAlong(stops[i].latlng);if(ki!=null&&ki>k+0.0005){insertIdx=i;break;}}
+  if(insertIdx===-1)insertIdx=stops.length-1; // przed metą
+  const s={id:idSeq++,latlng,address:"",marker:null};makeStopMarker(s);
+  stops.splice(insertIdx,0,s);
+  renderStops();rebuildRoute();
+  reverseGeocode(latlng).then(a=>{s.address=a;renderStops();});
+  toast("Dodano przystanek pomiędzy — kolejne przenumerowane.");
+}
 function drawKmMarkers(){if(kmLayer){map.removeLayer(kmLayer);kmLayer=null;}if(!showKm||lastGeometry.length<2)return;kmLayer=L.layerGroup().addTo(map);for(let km=1;km*1000<totalMeters;km++)L.marker(pointAtMeters(km*1000),{icon:L.divIcon({className:"kmlabel",html:`${km} km`,iconSize:null}),interactive:false}).addTo(kmLayer);}
 function updateStats(){$("distVal").textContent=(totalMeters/1000).toFixed(2).replace(".",",");const db=$("distBadge");if(db)db.textContent="📏 Trasa: "+(totalMeters/1000).toFixed(2).replace(".",",")+" km";$("cpVal").textContent=pois.filter(p=>p.type==="checkpoint").length;$("poiCount").textContent=pois.length;$("listCount").textContent=pois.length;$("clearPoiBtn").disabled=pois.length===0;$("gpxBtn").disabled=lastGeometry.length<2&&pois.length===0;try{updateTime();}catch(e){}}
 
@@ -397,7 +408,7 @@ $("clearPoiBtn").onclick=()=>{pois.forEach(p=>map.removeLayer(p.marker));pois=[]
 $("collapseBtn").onclick=()=>{const p=$("panel");p.classList.toggle("collapsed");$("collapseBtn").textContent=p.classList.contains("collapsed")?"▴":"▾";setTimeout(()=>map.invalidateSize(),250);};
 
 const sInput=$("searchInput"),sDrop=$("searchResults"),sInfo=$("searchInfo"),sSpin=$("searchSpin");
-function searchInfoText(){sInfo.textContent="Klikasz na mapie / wyszukujesz: "+(mode==="route"?"🟧 punkt trasy":POI[poiType].ic+" "+POI[poiType].label);}
+function searchInfoText(){sInfo.innerHTML=(mode==="route"?"Klikasz na mapie: 🟧 nowy punkt na końcu · klik <b>na pomarańczowej linii</b> = wstaw punkt pomiędzy":"Klikasz na mapie / wyszukujesz: "+POI[poiType].ic+" "+POI[poiType].label);}
 function setMode(m){mode=m;document.querySelectorAll("#modeSeg button").forEach(b=>b.classList.toggle("on",b.dataset.m===m));searchInfoText();}
 $("modeSeg").addEventListener("click",e=>{const b=e.target.closest("button");if(b)setMode(b.dataset.m);});
 let sTimer=null;
