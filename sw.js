@@ -1,5 +1,5 @@
 // Service worker dla Planera Trasy — instalacja + offline, z automatyczną aktualizacją.
-const CACHE = "planer-trasy-v4";
+const CACHE = "planer-trasy-v5";
 const SHELL = [
   "planer-trasy.html",
   "manifest.json",
