@@ -580,10 +580,12 @@ $("paceChips").addEventListener("click",e=>{const b=e.target.closest(".chip");if
 $("paceSet").onclick=()=>{const v=$("paceCustom").value.trim();let s=null;if(v.indexOf(":")>=0){const p=v.split(":");s=(parseInt(p[0])||0)*60+(parseInt(p[1])||0);}else{s=Math.round(parseFloat(v.replace(",","."))*60);}if(s&&s>0){paceSec=s;[...$("paceChips").children].forEach(c=>c.classList.remove("on"));updateTime();toast("Tempo: "+fmtPace(paceSec)+" min/km");}};
 
 // ---------- live collaboration (Firebase) ----------
-let live=false,fdb=null,roomRef=null,presRef=null,myPresRef=null,clientId=Math.random().toString(36).slice(2,9),myColor=null,lastSentJSON="",applyingRemote=false,cursorLayer=null,presenceData={},cursorThrottle=0;
+function deviceId(){try{let id=localStorage.getItem("planer_device");if(!id){id=Math.random().toString(36).slice(2,9);localStorage.setItem("planer_device",id);}return id;}catch(e){return Math.random().toString(36).slice(2,9);}}
+function deviceColor(){try{let c=localStorage.getItem("planer_color");if(!c){c=LIVE_PALETTE[Math.floor(Math.random()*LIVE_PALETTE.length)];localStorage.setItem("planer_color",c);}return c;}catch(e){return LIVE_PALETTE[0];}}
+let live=false,fdb=null,roomRef=null,presRef=null,myPresRef=null,clientId=deviceId(),myColor=null,lastSentJSON="",applyingRemote=false,cursorLayer=null,presenceData={},cursorThrottle=0,liveHeartbeat=null;
 function getRoom(){const m=(location.hash||"").match(/room=([a-z0-9]+)/i);return m?m[1]:null;}
 function renderPresence(){
-  const chips=$("liveOnline");if(chips){chips.innerHTML="";Object.entries(presenceData).forEach(([id,p])=>{if(!p)return;const el=document.createElement("span");el.className="online-chip";el.innerHTML=`<span class="dotc" style="background:${p.color}"></span>${(id===clientId?(p.name||"Ty")+" (Ty)":(p.name||"Gość")).replace(/</g,"&lt;")}`;chips.appendChild(el);});}
+  const chips=$("liveOnline");if(chips){chips.innerHTML="";const now0=Date.now();Object.entries(presenceData).forEach(([id,p])=>{if(!p)return;if(p.t&&now0-p.t>30000)return;const el=document.createElement("span");el.className="online-chip";el.innerHTML=`<span class="dotc" style="background:${p.color}"></span>${(id===clientId?(p.name||"Ty")+" (Ty)":(p.name||"Gość")).replace(/</g,"&lt;")}`;chips.appendChild(el);});}
   if(!cursorLayer)return;cursorLayer.clearLayers();const now=Date.now();
   Object.entries(presenceData).forEach(([id,p])=>{if(id===clientId||!p||p.cx==null)return;if(now-(p.t||0)>15000)return;L.marker([p.cy,p.cx],{icon:L.divIcon({className:"",iconSize:null,html:`<div style="transform:translate(-4px,-4px)"><div style="width:14px;height:14px;border-radius:50%;background:${p.color};border:2px solid #fff;box-shadow:0 1px 4px #0008"></div><div style="margin-top:2px;background:${p.color};color:#fff;font:700 10px sans-serif;padding:1px 6px;border-radius:6px;white-space:nowrap;box-shadow:0 1px 4px #0006">${(p.name||"Gość").replace(/</g,"&lt;")}</div></div>`}),interactive:false}).addTo(cursorLayer);});
 }
@@ -596,17 +598,21 @@ async function startLive(){
   if(typeof firebase==="undefined"){liveStat("❌ Nie wczytały się biblioteki Firebase.<br>Kliknij u góry „🔄 Odśwież / pobierz najnowszą wersję”, potem spróbuj ponownie.","err");return;}
   try{if(!firebase.apps.length)firebase.initializeApp(FIREBASE_CONFIG);fdb=firebase.database();}catch(e){liveStat("❌ Błąd Firebase: "+(e&&e.message?e.message:e),"err");return;}
   let room=getRoom();if(!room){room=Math.random().toString(36).slice(2,10);location.hash="room="+room;}
-  myColor=LIVE_PALETTE[Math.floor(Math.random()*LIVE_PALETTE.length)];
+  myColor=deviceColor();
   const myName=($("liveName").value||"Gość").slice(0,20);
+  try{localStorage.setItem("planer_name",myName);}catch(e){}
   roomRef=fdb.ref("rooms/"+room+"/project");
   presRef=fdb.ref("rooms/"+room+"/presence");
   myPresRef=presRef.child(clientId);
   fdb.ref(".info/connected").on("value",snap=>{
-    if(snap.val()===true){liveStat("✅ Połączono. Pokój: <b>"+room+"</b><br>Wyślij link wspólnikowi.","ok");}
+    if(snap.val()===true){liveStat("✅ Połączono. Pokój: <b>"+room+"</b><br>Wyślij link wspólnikowi.","ok");myPresRef.set({name:myName,color:myColor,t:Date.now()}).catch(()=>{});}
     else{liveStat("⏳ Łączę z bazą…","wait");}
   });
   myPresRef.set({name:myName,color:myColor,t:Date.now()}).catch(e=>liveStat("❌ Brak dostępu do bazy: "+e.message+"<br>(sprawdź tryb testowy reguł w Firebase)","err"));
   myPresRef.onDisconnect().remove();
+  // heartbeat: odświeża obecność co 5 s (gdy druga karta tego samego urządzenia się zamknie, ta utrzyma profil)
+  if(liveHeartbeat)clearInterval(liveHeartbeat);
+  liveHeartbeat=setInterval(()=>{if(myPresRef)myPresRef.update({t:Date.now()}).catch(()=>{});},5000);
   cursorLayer=L.layerGroup().addTo(map);
   map.on("mousemove",liveCursorMove);
   roomRef.once("value").then(snap=>{const d=snap.val();if(d){applyingRemote=true;loadProject(d,true).then(()=>{applyingRemote=false;lastSentJSON=JSON.stringify(serialize());});}else{lastSentJSON=JSON.stringify(serialize());roomRef.set(serialize());}}).catch(e=>liveStat("❌ Nie mogę odczytać pokoju: "+e.message,"err"));
@@ -622,6 +628,7 @@ $("liveBtn").onclick=startLive;
 $("liveCopyBtn").onclick=async()=>{const i=$("liveLink");i.select();try{await navigator.clipboard.writeText(i.value);}catch(e){}toast("Skopiowano link.");};
 
 renderStops();updateStats();searchInfoText();
+try{const savedName=localStorage.getItem("planer_name");if(savedName&&$("liveName"))$("liveName").value=savedName;}catch(e){}
 loadFromHash();
 if(getRoom()&&FIREBASE_CONFIG.apiKey)startLive();
 
