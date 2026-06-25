@@ -61,6 +61,10 @@
   .chip.on{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
   /* stops */
   .stop{position:relative;margin-bottom:9px}
+  .trackrow{display:flex;align-items:center;gap:6px;padding:6px;border-radius:8px;margin-bottom:6px;background:#222a33;border:1px solid transparent}
+  .trackrow.act{border-color:#ff6b1a;background:#2a2018}
+  .trackrow .tname{padding:6px 8px;font-size:13px}
+  .trackrow .mv,.trackrow .rm{flex:0 0 auto;width:30px}
   .stop .slabel{font-size:10.5px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--ink-dim);margin-bottom:5px;display:flex;align-items:center;gap:6px}
   .stop .slabel .dotc{width:9px;height:9px;border-radius:50%}
   .stop .inwrap{display:flex;gap:7px}
@@ -181,7 +185,7 @@
       </div>
       <div class="group">
         <div class="lbl">Współpraca na żywo</div>
-        <input id="liveName" type="text" class="fld" placeholder="Twoje imię (widoczne dla wspólnika)" style="margin-bottom:8px">
+        <input id="liveName" type="text" class="fld" placeholder="Twoje imię — wymagane (widoczne dla innych)" style="margin-bottom:8px">
         <button class="btn primary" id="liveBtn">🟢 Włącz współpracę na żywo</button>
         <div id="liveStatus" style="display:none;margin-top:8px;font-size:12px;padding:6px 9px;border-radius:7px;line-height:1.4"></div>
         <div id="liveWrap" style="display:none;margin-top:8px">
@@ -190,6 +194,12 @@
           <button class="btn" id="liveCopyBtn" style="margin-top:6px">📋 Kopiuj link do współpracy</button>
         </div>
         <p class="hint">Włącz i wyślij link wspólnikowi — zmiany trasy i punktów widać na żywo u obu osób, a każdy ma swój kolor (jego kursor na mapie i obecność). Wymaga jednorazowej, darmowej konfiguracji Firebase.</p>
+      </div>
+      <div class="group">
+        <div class="lbl">Trasy (warianty / kolory)</div>
+        <div id="trackList"></div>
+        <button class="addstop" id="addTrackBtn">＋ Dodaj kolejną trasę (inny kolor)</button>
+        <p class="hint">Każda trasa ma swój kolor i jest widoczna na tej samej mapie. „Edytuj" (✎) wybiera, którą teraz rysujesz. Np. pętla 5 km na pomarańczowo + dodatkowe 4 km na niebiesko = wariant 10 km.</p>
       </div>
       <div class="group">
         <div class="lbl">Trasa — wpisz adresy</div>
@@ -295,7 +305,22 @@ const POI={
   poi:{ic:"⭐",label:"Punkt",color:"#ff6b1a"}
 };
 let mode="route", poiType="checkpoint", snap=true, showKm=false;
+const TRACK_COLORS=["#ff6b1a","#2f7bff","#33c27a","#e23b4e","#9b59b6","#f1c40f","#16a085","#e67e22"];
+let tracks=[], activeTrack=null;
 let stops=[], pois=[], routeLine=null, routeHit=null, kmLayer=null, idSeq=1, lastGeometry=[], totalMeters=0;
+let trackSeq=1;
+function newTrack(name,color){const t={id:idSeq++,name:name||("Trasa "+trackSeq),color:color||TRACK_COLORS[(trackSeq-1)%TRACK_COLORS.length],stops:[],geometry:[],meters:0,line:null};trackSeq++;tracks.push(t);return t;}
+function syncActive(){if(activeTrack){activeTrack.stops=stops;activeTrack.geometry=lastGeometry;activeTrack.meters=totalMeters;}}
+function setActiveTrack(id){
+  syncActive();
+  // schowaj markery dotychczasowej aktywnej
+  stops.forEach(s=>{if(s.marker){map.removeLayer(s.marker);s.marker=null;}});
+  activeTrack=tracks.find(t=>t.id===id)||tracks[0];
+  stops=activeTrack.stops;lastGeometry=activeTrack.geometry;totalMeters=activeTrack.meters;
+  // odtwórz markery nowej aktywnej
+  stops.forEach(s=>{if(s.latlng)makeStopMarker(s);});
+  renderTrackList();renderStops();rebuildRoute();
+}
 
 const map=L.map("map",{zoomControl:false}).setView([52.2297,21.0122],13);
 const baseRoads=L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",{maxZoom:20,subdomains:"abcd",attribution:"&copy; OpenStreetMap &copy; CARTO"}).addTo(map);
@@ -340,14 +365,17 @@ window.addEventListener("resize",acHide);
 document.addEventListener("mousedown",e=>{if(acInput&&e.target!==acInput&&!$("acFloat").contains(e.target))acHide();});
 
 function stopLabel(i){if(stops.length<=1||i===0)return["Start","#33c27a"];if(i===stops.length-1)return["Meta","#1b2128"];return["Przystanek "+i,"#ff6b1a"];}
-function makeStopMarker(s){s.marker=L.marker(s.latlng,{draggable:true}).addTo(map);s.marker.on("dragend",async()=>{s.latlng=s.marker.getLatLng();s.address=await reverseGeocode(s.latlng);renderStops();rebuildRoute();});}
+function makeStopMarker(s){s.marker=L.marker(s.latlng,{draggable:true}).addTo(map);s.marker.on("dragend",async()=>{s.latlng=s.marker.getLatLng();s.address=await reverseGeocode(s.latlng);renderStops();rebuildRoute();});s.marker.on("click",()=>{const idx=stops.indexOf(s);const lab=stopLabel(idx)[0];const div=document.createElement("div");div.style.cssText="min-width:130px;text-align:center";div.innerHTML=`<div style="font:600 13px sans-serif;margin-bottom:8px;color:#1b2128">${lab}</div>`;const b=document.createElement("button");b.textContent="✕ Usuń ten punkt";b.style.cssText="background:#e23b4e;color:#fff;border:none;border-radius:6px;padding:7px 10px;font:600 12px sans-serif;cursor:pointer;width:100%";b.onclick=()=>{map.closePopup();removeStop(s.id);toast("Usunięto punkt — trasa przeliczona.");};div.appendChild(b);s.marker.bindPopup(div).openPopup();});}
 function addStop(latlng,address,silent){const s={id:idSeq++,latlng:latlng||null,address:address||"",marker:null};if(s.latlng)makeStopMarker(s);stops.push(s);if(!silent){renderStops();rebuildRoute();}return s;}
-function removeStop(id){const s=stops.find(x=>x.id===id);if(s&&s.marker)map.removeLayer(s.marker);stops=stops.filter(x=>x.id!==id);renderStops();rebuildRoute();}
+function removeStop(id){const s=stops.find(x=>x.id===id);if(s&&s.marker)map.removeLayer(s.marker);stops=stops.filter(x=>x.id!==id);if(activeTrack)activeTrack.stops=stops;renderStops();rebuildRoute();}
 function renumberStops(){let n=0;stops.forEach(s=>{if(s.marker){n++;s.marker.setIcon(waypointIcon(n));}});}
 function ensureEndpoints(){while(stops.length<2)stops.push({id:idSeq++,latlng:null,address:"",marker:null});}
 function clearStop(s){if(s.marker){map.removeLayer(s.marker);s.marker=null;}s.latlng=null;s.address="";renderStops();rebuildRoute();}
 function renderStops(){const wrap=$("stopsList");wrap.innerHTML="";ensureEndpoints();stops.forEach((s,i)=>{const[lab,col]=stopLabel(i);const isEnd=(i===0||i===stops.length-1);const row=document.createElement("div");row.className="stop";row.innerHTML=`<div class="slabel"><span class="dotc" style="background:${col}"></span>${lab}</div><div class="inwrap"><input class="fld" type="text" placeholder="Wpisz adres lub miejsce…" value="${(s.address||"").replace(/"/g,"&quot;")}"><button class="mv up" title="Wyżej">↑</button><button class="mv dn" title="Niżej">↓</button><button class="rm" title="${isEnd?"Wyczyść":"Usuń przystanek"}">${isEnd?"⌫":"✕"}</button></div>`;const input=row.querySelector("input"),up=row.querySelector(".up"),dn=row.querySelector(".dn");up.disabled=(i===0);dn.disabled=(i===stops.length-1);up.onclick=()=>moveStop(i,-1);dn.onclick=()=>moveStop(i,1);row.querySelector(".rm").onclick=()=>{if(isEnd)clearStop(s);else removeStop(s.id);};attachAutocomplete(input,it=>{const ll=L.latLng(it.lat,it.lon);s.latlng=ll;s.address=it.main;if(s.marker)s.marker.setLatLng(ll);else makeStopMarker(s);input.value=s.address;renderStops();map.setView(ll,15);rebuildRoute();});wrap.appendChild(row);});renumberStops();}
 function moveStop(i,dir){const j=i+dir;if(j<0||j>=stops.length)return;const t=stops[i];stops[i]=stops[j];stops[j]=t;renderStops();rebuildRoute();}
+function renderTrackList(){const wrap=$("trackList");if(!wrap)return;wrap.innerHTML="";tracks.forEach(t=>{const isAct=activeTrack&&t.id===activeTrack.id;const row=document.createElement("div");row.className="trackrow"+(isAct?" act":"");const km=(t.meters/1000).toFixed(2).replace(".",",");row.innerHTML=`<span class="dotc" style="background:${t.color};cursor:pointer"></span><input class="tname fld" value="${(t.name||"").replace(/"/g,"&quot;")}" style="flex:1;min-width:0"><span class="tkm" style="font-size:12px;color:#9aa7b4;white-space:nowrap">${km} km</span>`;const nameInp=row.querySelector(".tname");nameInp.onchange=()=>{t.name=nameInp.value;};nameInp.onclick=e=>e.stopPropagation();const actBtn=document.createElement("button");actBtn.className="mv";actBtn.textContent=isAct?"✏️":"✎";actBtn.title=isAct?"Edytujesz tę trasę":"Edytuj tę trasę";actBtn.onclick=e=>{e.stopPropagation();setActiveTrack(t.id);};row.appendChild(actBtn);if(tracks.length>1){const delBtn=document.createElement("button");delBtn.className="rm";delBtn.textContent="✕";delBtn.title="Usuń trasę";delBtn.onclick=e=>{e.stopPropagation();removeTrack(t.id);};row.appendChild(delBtn);}row.querySelector(".dotc").onclick=()=>setActiveTrack(t.id);wrap.appendChild(row);});}
+function addTrackUI(){const t=newTrack();setActiveTrack(t.id);toast("Dodano nową trasę („"+t.name+"”) — rysuj ją na mapie.");}
+function removeTrack(id){if(tracks.length<=1){toast("To jedyna trasa.");return;}const t=tracks.find(x=>x.id===id);if(!t)return;if(t.line)map.removeLayer(t.line);t.stops.forEach(s=>{if(s.marker)map.removeLayer(s.marker);});const wasActive=activeTrack&&activeTrack.id===id;tracks=tracks.filter(x=>x.id!==id);if(wasActive){activeTrack=null;setActiveTrack(tracks[0].id);}else{renderTrackList();}toast("Usunięto trasę.");}
 async function placeRouteStop(latlng,address){ensureEndpoints();let s;if(!stops[0].latlng)s=stops[0];else if(!stops[stops.length-1].latlng)s=stops[stops.length-1];else{s={id:idSeq++,latlng:null,address:"",marker:null};stops.push(s);}s.latlng=latlng;if(s.marker)s.marker.setLatLng(latlng);else makeStopMarker(s);s.address=address||await reverseGeocode(latlng);renderStops();rebuildRoute();}
 
 async function fetchRoute(coords){
@@ -370,7 +398,8 @@ async function fetchRoute(coords){
   toast("Silniki trasy chwilowo niedostępne — linia prosta. Spróbuj ponownie.");
   return null;
 }
-async function rebuildRoute(){if(routeLine){map.removeLayer(routeLine);routeLine=null;}if(routeHit){map.removeLayer(routeHit);routeHit=null;}lastGeometry=[];totalMeters=0;const coords=stops.filter(s=>s.latlng).map(s=>s.latlng);if(coords.length>=1){if(snap&&coords.length>=2){const res=await fetchRoute(coords);if(res){totalMeters=res.meters;lastGeometry=res.geometry;}}if(lastGeometry.length===0){lastGeometry=coords.map(c=>[c.lat,c.lng]);for(let i=1;i<coords.length;i++)totalMeters+=haversine(coords[i-1],coords[i]);}if(lastGeometry.length>=2){routeLine=L.polyline(lastGeometry,{color:"#ff6b1a",weight:5,opacity:.9,lineJoin:"round"}).addTo(map);routeLine.bringToBack();routeLine._path&&(routeLine._path.style.cursor="copy");}}drawKmMarkers();renderPoiList();updateStats();updateTarget();}
+function redrawAllTrackLines(){tracks.forEach(t=>{if(t.line){map.removeLayer(t.line);t.line=null;}if(t.geometry&&t.geometry.length>=2){const isAct=activeTrack&&t.id===activeTrack.id;t.line=L.polyline(t.geometry,{color:t.color,weight:isAct?6:4,opacity:isAct?.95:.55,lineJoin:"round",interactive:false}).addTo(map);t.line.bringToBack();}});}
+async function rebuildRoute(){const coords=stops.filter(s=>s.latlng).map(s=>s.latlng);lastGeometry=[];totalMeters=0;if(coords.length>=1){if(snap&&coords.length>=2){const res=await fetchRoute(coords);if(res){totalMeters=res.meters;lastGeometry=res.geometry;}}if(lastGeometry.length===0){lastGeometry=coords.map(c=>[c.lat,c.lng]);for(let i=1;i<coords.length;i++)totalMeters+=haversine(coords[i-1],coords[i]);}}syncActive();redrawAllTrackLines();routeLine=activeTrack?activeTrack.line:null;drawKmMarkers();renderPoiList();updateStats();updateTarget();renderTrackList();}
 async function insertStopOnLine(latlng){
   const k=kmAlong(latlng);if(k==null){placeRouteStop(latlng);return;}
   let insertIdx=-1;
@@ -383,7 +412,7 @@ async function insertStopOnLine(latlng){
   toast("Dodano przystanek pomiędzy — kolejne przenumerowane.");
 }
 function drawKmMarkers(){if(kmLayer){map.removeLayer(kmLayer);kmLayer=null;}if(!showKm||lastGeometry.length<2)return;kmLayer=L.layerGroup().addTo(map);for(let km=1;km*1000<totalMeters;km++)L.marker(pointAtMeters(km*1000),{icon:L.divIcon({className:"kmlabel",html:`${km} km`,iconSize:null}),interactive:false}).addTo(kmLayer);}
-function updateStats(){$("distVal").textContent=(totalMeters/1000).toFixed(2).replace(".",",");const db=$("distBadge");if(db)db.textContent="📏 Trasa: "+(totalMeters/1000).toFixed(2).replace(".",",")+" km";$("cpVal").textContent=pois.filter(p=>p.type==="checkpoint").length;$("poiCount").textContent=pois.length;$("listCount").textContent=pois.length;$("clearPoiBtn").disabled=pois.length===0;$("gpxBtn").disabled=lastGeometry.length<2&&pois.length===0;try{updateTime();}catch(e){}}
+function updateStats(){syncActive();const sum=tracks.reduce((a,t)=>a+(t.meters||0),0);$("distVal").textContent=(sum/1000).toFixed(2).replace(".",",");const db=$("distBadge");if(db)db.textContent=(tracks.length>1?"📏 Suma: ":"📏 Trasa: ")+(sum/1000).toFixed(2).replace(".",",")+" km"+(tracks.length>1&&activeTrack?" (tu: "+(totalMeters/1000).toFixed(2).replace(".",",")+")":"");$("cpVal").textContent=pois.filter(p=>p.type==="checkpoint").length;$("poiCount").textContent=pois.length;$("listCount").textContent=pois.length;$("clearPoiBtn").disabled=pois.length===0;$("gpxBtn").disabled=lastGeometry.length<2&&pois.length===0;try{updateTime();}catch(e){}}
 
 function addPoi(type,latlng,name){const id=idSeq++;const obj={id,type,latlng,name:name||"",note:""};obj.marker=L.marker(latlng,{icon:poiIcon(type),draggable:true}).addTo(map);obj.marker.on("dragend",()=>{obj.latlng=obj.marker.getLatLng();renderPoiList();});obj.marker.on("click",()=>openEditor(id));pois.push(obj);renderPoiList();updateStats();return obj;}
 function renderPoiList(){const el=$("poiList");if(pois.length===0){el.innerHTML='<div class="empty">Brak punktów. Wybierz typ powyżej i kliknij na mapie, albo rozmieść automatycznie.</div>';return;}const cps=pois.filter(p=>p.type==="checkpoint").map(p=>({p,km:kmAlong(p.latlng)??1e9})).sort((a,b)=>a.km-b.km);cps.forEach((x,i)=>x.p._cpNo=i+1);pois.forEach(p=>p.marker.setIcon(poiIcon(p.type,p.type==="checkpoint"?p._cpNo:null)));const sorted=[...pois].map(p=>({p,km:kmAlong(p.latlng)})).sort((a,b)=>(a.km??1e9)-(b.km??1e9));el.innerHTML="";sorted.forEach(({p,km})=>{const def=POI[p.type].label+(p.type==="checkpoint"?" "+p._cpNo:"");const display=p.name||def;const kmTxt=km!=null?km.toFixed(2).replace(".",",")+" km":"—";const item=document.createElement("div");item.className="poiItem";item.dataset.id=p.id;item.innerHTML=`<div class="head"><span class="ic">${POI[p.type].ic}</span><span class="nm">${display.replace(/</g,"&lt;")}</span><span class="km">${kmTxt}</span><button class="del" title="Usuń">✕</button></div><div class="edit"><input type="text" class="fld" placeholder="Nazwa (np. ${def})" value="${(p.name||"").replace(/"/g,"&quot;")}"><textarea class="fld" placeholder="Notatka — obsada, sprzęt, godziny otwarcia">${(p.note||"").replace(/</g,"&lt;")}</textarea></div>`;item.querySelector(".head").onclick=ev=>{if(ev.target.classList.contains("del")){map.removeLayer(p.marker);pois=pois.filter(x=>x.id!==p.id);renderPoiList();updateStats();return;}item.classList.toggle("open");if(item.classList.contains("open"))map.panTo(p.latlng);};const ni=item.querySelector("input"),ta=item.querySelector("textarea");ni.oninput=()=>{p.name=ni.value;item.querySelector(".nm").textContent=p.name||def;};ta.oninput=()=>{p.note=ta.value;};el.appendChild(item);});}
@@ -398,8 +427,9 @@ function openTypeChooser(latlng){
   L.popup({minWidth:240,closeButton:true}).setLatLng(latlng).setContent(box).openOn(map);
 }
 function pxPtSeg(p,a,b){const dx=b.x-a.x,dy=b.y-a.y;const len=dx*dx+dy*dy;let t=len?((p.x-a.x)*dx+(p.y-a.y)*dy)/len:0;t=Math.max(0,Math.min(1,t));const qx=a.x+t*dx,qy=a.y+t*dy;return Math.hypot(p.x-qx,p.y-qy);}
-function pxDistToRoute(latlng){if(lastGeometry.length<2)return Infinity;const p=map.latLngToContainerPoint(latlng);let best=Infinity;for(let i=1;i<lastGeometry.length;i++){const a=map.latLngToContainerPoint(L.latLng(lastGeometry[i-1][0],lastGeometry[i-1][1]));const b=map.latLngToContainerPoint(L.latLng(lastGeometry[i][0],lastGeometry[i][1]));const d=pxPtSeg(p,a,b);if(d<best)best=d;}return best;}
-map.on("click",e=>{if(mode==="route"){if(stops.filter(s=>s.latlng).length>=2&&pxDistToRoute(e.latlng)<18)insertStopOnLine(e.latlng);else placeRouteStop(e.latlng);}else openTypeChooser(e.latlng);});
+function pxDistToGeom(latlng,geom){if(!geom||geom.length<2)return Infinity;const p=map.latLngToContainerPoint(latlng);let best=Infinity;for(let i=1;i<geom.length;i++){const a=map.latLngToContainerPoint(L.latLng(geom[i-1][0],geom[i-1][1]));const b=map.latLngToContainerPoint(L.latLng(geom[i][0],geom[i][1]));const d=pxPtSeg(p,a,b);if(d<best)best=d;}return best;}
+function pxDistToRoute(latlng){return pxDistToGeom(latlng,lastGeometry);}
+map.on("click",e=>{if(mode==="route"){let near=null,nd=18;tracks.forEach(t=>{if(activeTrack&&t.id===activeTrack.id)return;const d=pxDistToGeom(e.latlng,t.geometry);if(d<nd){nd=d;near=t;}});if(near){setActiveTrack(near.id);toast("Przełączono na: "+near.name);return;}if(stops.filter(s=>s.latlng).length>=2&&pxDistToRoute(e.latlng)<18)insertStopOnLine(e.latlng);else placeRouteStop(e.latlng);}else openTypeChooser(e.latlng);});
 
 $("distribBtn").onclick=()=>{if(lastGeometry.length<2){toast("Najpierw wyznacz trasę.");return;}const every=parseFloat($("cpEvery").value)*1000;if(!every||every<50){toast("Podaj odstęp większy niż 0,05 km.");return;}let added=0;for(let d=every;d<totalMeters;d+=every){addPoi("checkpoint",pointAtMeters(d));added++;}toast(added?`Rozmieszczono ${added} punktów kontrolnych`:"Trasa za krótka dla tego odstępu");};
 $("addStopBtn").onclick=()=>{setMode("route");ensureEndpoints();const s={id:idSeq++,latlng:null,address:"",marker:null};stops.splice(stops.length-1,0,s);renderStops();const ins=document.querySelectorAll("#stopsList input");if(ins.length>=2)ins[ins.length-2].focus();};
@@ -410,7 +440,7 @@ $("clearPoiBtn").onclick=()=>{pois.forEach(p=>map.removeLayer(p.marker));pois=[]
 $("collapseBtn").onclick=()=>{const p=$("panel");p.classList.toggle("collapsed");$("collapseBtn").textContent=p.classList.contains("collapsed")?"▴":"▾";setTimeout(()=>map.invalidateSize(),250);};
 
 const sInput=$("searchInput"),sDrop=$("searchResults"),sInfo=$("searchInfo"),sSpin=$("searchSpin");
-function searchInfoText(){sInfo.innerHTML=(mode==="route"?"Klikasz na mapie: 🟧 nowy punkt na końcu · klik <b>na pomarańczowej linii</b> = wstaw punkt pomiędzy":"Klikasz na mapie / wyszukujesz: "+POI[poiType].ic+" "+POI[poiType].label);}
+function searchInfoText(){sInfo.innerHTML=(mode==="route"?"Klik na mapie: 🟧 punkt na końcu · klik <b>na linii</b> = wstaw pomiędzy · klik <b>w marker</b> = usuń":"Klikasz na mapie / wyszukujesz: "+POI[poiType].ic+" "+POI[poiType].label);}
 function setMode(m){mode=m;document.querySelectorAll("#modeSeg button").forEach(b=>b.classList.toggle("on",b.dataset.m===m));searchInfoText();}
 $("modeSeg").addEventListener("click",e=>{const b=e.target.closest("button");if(b)setMode(b.dataset.m);});
 let sTimer=null;
@@ -418,14 +448,28 @@ sInput.addEventListener("focus",searchInfoText);
 sInput.addEventListener("input",()=>{clearTimeout(sTimer);const q=sInput.value.trim();if(q.length<3){sDrop.classList.remove("show");return;}sTimer=setTimeout(async()=>{searchInfoText();sSpin.textContent="…";try{const list=await geocode(q);sDrop.innerHTML="";if(!list.length)sDrop.innerHTML='<div class="res">Nic nie znaleziono. Dopisz miasto.</div>';else list.forEach(it=>{const el=document.createElement("div");el.className="res";el.innerHTML=`<span class="pin">📍</span><span class="t">${it.main.replace(/</g,"&lt;")}<small>${it.rest.replace(/</g,"&lt;")}</small></span>`;el.onclick=()=>{const ll=L.latLng(it.lat,it.lon);map.setView(ll,15);if(mode==="route")placeRouteStop(ll,it.main);else addPoi(poiType,ll);sDrop.classList.remove("show");sInput.value="";toast("Dodano: "+it.main);};sDrop.appendChild(el);});sDrop.classList.add("show");}catch(e){sDrop.innerHTML='<div class="res">Brak połączenia.</div>';sDrop.classList.add("show");}sSpin.textContent="";},550);});
 document.addEventListener("click",e=>{if(!$("searchWrap").contains(e.target))sDrop.classList.remove("show");});
 
-function serialize(){return{v:3,name:$("projName").value,snap,stops:stops.filter(s=>s.latlng).map(s=>({lat:s.latlng.lat,lng:s.latlng.lng,address:s.address})),pois:pois.map(p=>({type:p.type,lat:p.latlng.lat,lng:p.latlng.lng,name:p.name,note:p.note}))};}
+function serialize(){syncActive();return{v:4,name:$("projName").value,snap,activeTrack:activeTrack?activeTrack.id:null,tracks:tracks.map(t=>({id:t.id,name:t.name,color:t.color,stops:t.stops.filter(s=>s.latlng).map(s=>({lat:s.latlng.lat,lng:s.latlng.lng,address:s.address}))})),pois:pois.map(p=>({type:p.type,lat:p.latlng.lat,lng:p.latlng.lng,name:p.name,note:p.note}))};}
 $("saveBtn").onclick=()=>{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(serialize(),null,2)],{type:"application/json"}));a.download=($("projName").value||"projekt").replace(/[^\w-]+/g,"_")+".json";a.click();URL.revokeObjectURL(a.href);toast("Zapisano projekt ✓");};
 $("loadBtn").onclick=()=>$("fileInput").click();
 $("fileInput").onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{loadProject(JSON.parse(rd.result));toast("Wczytano projekt ✓");}catch(err){toast("Nie udało się wczytać pliku.");}};rd.readAsText(f);e.target.value="";};
 $("newBtn").onclick=()=>{if((stops.some(s=>s.latlng)||pois.length)&&!confirm("Wyczyścić bieżący projekt?"))return;clearAll();$("projName").value="Moje wydarzenie";toast("Nowy projekt");};
-function clearAll(){stops.forEach(s=>{if(s.marker)map.removeLayer(s.marker);});stops=[];pois.forEach(p=>map.removeLayer(p.marker));pois=[];renderStops();rebuildRoute();}
-function fitToRoute(){const all=[...stops.filter(s=>s.latlng).map(s=>s.latlng),...pois.map(p=>p.latlng)];if(!all.length){toast("Brak punktów na trasie.");return;}map.invalidateSize();const b=L.latLngBounds(all).pad(0.25);if(all.length===1)map.setView(all[0],15);else map.fitBounds(b);}
-async function loadProject(d,keepView){stops.forEach(s=>{if(s.marker)map.removeLayer(s.marker);});stops=[];pois.forEach(p=>map.removeLayer(p.marker));pois=[];$("projName").value=d.name||"Wczytany projekt";if(typeof d.snap==="boolean"){snap=d.snap;$("snapToggle").classList.toggle("on",snap);}(d.stops||d.waypoints||[]).forEach(w=>addStop(L.latLng(w.lat,w.lng),w.address||"",true));(d.pois||[]).forEach(p=>{const o=addPoi(p.type,L.latLng(p.lat,p.lng),p.name);if(o)o.note=p.note||"";});renderStops();await rebuildRoute();if(!keepView){fitToRoute();setTimeout(fitToRoute,250);}}
+function clearTracksFromMap(){tracks.forEach(t=>{if(t.line){map.removeLayer(t.line);t.line=null;}t.stops.forEach(s=>{if(s.marker){map.removeLayer(s.marker);s.marker=null;}});});}
+function clearAll(){clearTracksFromMap();tracks=[];trackSeq=1;pois.forEach(p=>map.removeLayer(p.marker));pois=[];activeTrack=newTrack();stops=activeTrack.stops;lastGeometry=[];totalMeters=0;renderTrackList();renderStops();rebuildRoute();}
+function fitToRoute(){syncActive();const all=[];tracks.forEach(t=>t.stops.forEach(s=>{if(s.latlng)all.push(s.latlng);}));pois.forEach(p=>all.push(p.latlng));if(!all.length){toast("Brak punktów na trasie.");return;}map.invalidateSize();const b=L.latLngBounds(all).pad(0.25);if(all.length===1)map.setView(all[0],15);else map.fitBounds(b);}
+async function loadProject(d,keepView){
+  clearTracksFromMap();tracks=[];trackSeq=1;pois.forEach(p=>map.removeLayer(p.marker));pois=[];
+  $("projName").value=d.name||"Wczytany projekt";
+  if(typeof d.snap==="boolean"){snap=d.snap;$("snapToggle").classList.toggle("on",snap);}
+  const trackDefs=(d.tracks&&d.tracks.length)?d.tracks:[{name:"Trasa 1",color:TRACK_COLORS[0],stops:(d.stops||d.waypoints||[])}];
+  trackDefs.forEach(td=>{const t=newTrack(td.name,td.color);(td.stops||[]).forEach(w=>{const s={id:idSeq++,latlng:L.latLng(w.lat,w.lng),address:w.address||"",marker:null};t.stops.push(s);});});
+  (d.pois||[]).forEach(p=>{const o=addPoi(p.type,L.latLng(p.lat,p.lng),p.name);if(o)o.note=p.note||"";});
+  for(const t of tracks){const coords=t.stops.filter(s=>s.latlng).map(s=>s.latlng);t.geometry=[];t.meters=0;if(coords.length>=2){if(snap){const res=await fetchRoute(coords);if(res){t.meters=res.meters;t.geometry=res.geometry;}}if(t.geometry.length===0){t.geometry=coords.map(c=>[c.lat,c.lng]);for(let i=1;i<coords.length;i++)t.meters+=haversine(coords[i-1],coords[i]);}}}
+  const wantId=(d.activeTrack&&tracks.find(t=>t.id===d.activeTrack))?d.activeTrack:tracks[0].id;
+  activeTrack=tracks.find(t=>t.id===wantId);stops=activeTrack.stops;lastGeometry=activeTrack.geometry;totalMeters=activeTrack.meters;
+  stops.forEach(s=>{if(s.latlng)makeStopMarker(s);});
+  renderTrackList();renderStops();await rebuildRoute();
+  if(!keepView){fitToRoute();setTimeout(fitToRoute,250);}
+}
 
 // ---------- target distance (5 / 10 km / custom) ----------
 let targetKm=null, targetMarker=null;
@@ -481,9 +525,10 @@ async function proposeRoute(){
   }
   btn.textContent=old;btn.disabled=false;
   if(!best){toast("Nie udało się ułożyć trasy — spróbuj ponownie lub przesuń start.");return;}
-  stops.forEach(s=>{if(s.marker)map.removeLayer(s.marker);});stops=[];
+  stops.forEach(s=>{if(s.marker)map.removeLayer(s.marker);});stops.length=0;
   const mk=ll=>{const s={id:idSeq++,latlng:ll,address:"",marker:null};makeStopMarker(s);return s;};
   stops.push(mk(start));best.pts.forEach(p=>stops.push(mk(p)));stops.push(mk(start));
+  if(activeTrack)activeTrack.stops=stops;
   renderStops();await rebuildRoute();
   const all=stops.map(s=>s.latlng);if(all.length)map.fitBounds(L.latLngBounds(all).pad(0.25));
   toast("Propozycja: "+(best.meters/1000).toFixed(2).replace(".",",")+" km — przeciągnij punkty, by dopasować.");
@@ -508,7 +553,7 @@ function loadFromHash(){
   }
   // brak linku z projektem i brak pokoju -> spróbuj wczytać autozapis z tego urządzenia
   if(h.indexOf("#room=")!==0){
-    try{const saved=localStorage.getItem("planer_autosave");if(saved){const d=JSON.parse(saved);if(d&&((d.stops&&d.stops.length)||(d.pois&&d.pois.length))){loadProject(d);toast("Przywrócono ostatni projekt z tego urządzenia.");}}}catch(e){}
+    try{const saved=localStorage.getItem("planer_autosave");if(saved){const d=JSON.parse(saved);const hasTrack=d&&d.tracks&&d.tracks.some(t=>t.stops&&t.stops.length);const hasOld=d&&d.stops&&d.stops.length;if(d&&(hasTrack||hasOld||(d.pois&&d.pois.length))){loadProject(d);toast("Przywrócono ostatni projekt z tego urządzenia.");}}}catch(e){}
   }
 }
 // autozapis co 4 s, jeśli coś się zmieniło (działa tylko lokalnie na tym urządzeniu)
@@ -608,13 +653,18 @@ function liveStat(msg,kind){const s=$("liveStatus");if(!s)return;s.style.display
 async function startLive(){
   if(live)return;
   if(!FIREBASE_CONFIG.apiKey){alert("Aby włączyć współpracę na żywo, trzeba najpierw raz skonfigurować darmowy Firebase i wkleić dane do pliku. Poproś asystenta o instrukcję.");return;}
+  // imię jest wymagane
+  let myName=($("liveName").value||"").trim();
+  if(!myName){try{myName=(localStorage.getItem("planer_name")||"").trim();}catch(e){}if(myName)$("liveName").value=myName;}
+  if(!myName){myName=(prompt("Podaj swoje imię — będzie widoczne dla pozostałych uczestników współpracy:")||"").trim();if(myName)$("liveName").value=myName;}
+  if(!myName){liveStat("✋ Podaj swoje imię w polu powyżej, aby dołączyć do współpracy.","wait");try{$("liveName").focus();}catch(e){}return;}
+  myName=myName.slice(0,20);
+  try{localStorage.setItem("planer_name",myName);}catch(e){}
   liveStat("⏳ Łączę z Firebase…","wait");
   if(typeof firebase==="undefined"){liveStat("❌ Nie wczytały się biblioteki Firebase.<br>Kliknij u góry „🔄 Odśwież / pobierz najnowszą wersję”, potem spróbuj ponownie.","err");return;}
   try{if(!firebase.apps.length)firebase.initializeApp(FIREBASE_CONFIG);fdb=firebase.database();}catch(e){liveStat("❌ Błąd Firebase: "+(e&&e.message?e.message:e),"err");return;}
   let room=getRoom();if(!room){room=Math.random().toString(36).slice(2,10);location.hash="room="+room;}
   myColor=deviceColor();
-  const myName=($("liveName").value||"Gość").slice(0,20);
-  try{localStorage.setItem("planer_name",myName);}catch(e){}
   roomRef=fdb.ref("rooms/"+room+"/project");
   presRef=fdb.ref("rooms/"+room+"/presence");
   myPresRef=presRef.child(clientId);
@@ -641,8 +691,11 @@ async function startLive(){
 $("liveBtn").onclick=startLive;
 $("liveCopyBtn").onclick=async()=>{const i=$("liveLink");i.select();try{await navigator.clipboard.writeText(i.value);}catch(e){}toast("Skopiowano link.");};
 
+if(!tracks.length){activeTrack=newTrack("Trasa 1",TRACK_COLORS[0]);stops=activeTrack.stops;}
+renderTrackList();
 renderStops();updateStats();searchInfoText();
 $("fitBtn").onclick=fitToRoute;
+$("addTrackBtn").onclick=addTrackUI;
 try{const savedName=localStorage.getItem("planer_name");if(savedName&&$("liveName"))$("liveName").value=savedName;}catch(e){}
 loadFromHash();
 if(getRoom()&&FIREBASE_CONFIG.apiKey)startLive();
