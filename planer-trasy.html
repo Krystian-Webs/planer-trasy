@@ -461,7 +461,7 @@ async function loadProject(d,keepView){
   $("projName").value=d.name||"Wczytany projekt";
   if(typeof d.snap==="boolean"){snap=d.snap;$("snapToggle").classList.toggle("on",snap);}
   const trackDefs=(d.tracks&&d.tracks.length)?d.tracks:[{name:"Trasa 1",color:TRACK_COLORS[0],stops:(d.stops||d.waypoints||[])}];
-  trackDefs.forEach(td=>{const t=newTrack(td.name,td.color);(td.stops||[]).forEach(w=>{const s={id:idSeq++,latlng:L.latLng(w.lat,w.lng),address:w.address||"",marker:null};t.stops.push(s);});});
+  trackDefs.forEach(td=>{const t=newTrack(td.name,td.color);if(td.id!=null){t.id=td.id;if(td.id>=idSeq)idSeq=td.id+1;}(td.stops||[]).forEach(w=>{const s={id:idSeq++,latlng:L.latLng(w.lat,w.lng),address:w.address||"",marker:null};t.stops.push(s);});});
   (d.pois||[]).forEach(p=>{const o=addPoi(p.type,L.latLng(p.lat,p.lng),p.name);if(o)o.note=p.note||"";});
   for(const t of tracks){const coords=t.stops.filter(s=>s.latlng).map(s=>s.latlng);t.geometry=[];t.meters=0;if(coords.length>=2){if(snap){const res=await fetchRoute(coords);if(res){t.meters=res.meters;t.geometry=res.geometry;}}if(t.geometry.length===0){t.geometry=coords.map(c=>[c.lat,c.lng]);for(let i=1;i<coords.length;i++)t.meters+=haversine(coords[i-1],coords[i]);}}}
   const wantId=(d.activeTrack&&tracks.find(t=>t.id===d.activeTrack))?d.activeTrack:tracks[0].id;
@@ -641,7 +641,8 @@ $("paceSet").onclick=()=>{const v=$("paceCustom").value.trim();let s=null;if(v.i
 // ---------- live collaboration (Firebase) ----------
 function deviceId(){try{let id=localStorage.getItem("planer_device");if(!id){id=Math.random().toString(36).slice(2,9);localStorage.setItem("planer_device",id);}return id;}catch(e){return Math.random().toString(36).slice(2,9);}}
 function deviceColor(){try{let c=localStorage.getItem("planer_color");if(!c){c=LIVE_PALETTE[Math.floor(Math.random()*LIVE_PALETTE.length)];localStorage.setItem("planer_color",c);}return c;}catch(e){return LIVE_PALETTE[0];}}
-let live=false,fdb=null,roomRef=null,presRef=null,myPresRef=null,clientId=deviceId(),myColor=null,lastSentJSON="",applyingRemote=false,cursorLayer=null,presenceData={},cursorThrottle=0,liveHeartbeat=null;
+let live=false,fdb=null,roomRef=null,presRef=null,myPresRef=null,clientId=deviceId(),myColor=null,lastSentSig="",applyingRemote=false,cursorLayer=null,presenceData={},cursorThrottle=0,liveHeartbeat=null;
+function projectSig(d){try{const t=(d.tracks||[]).map(tr=>(tr.color||"")+":"+(tr.name||"")+":"+(tr.stops||[]).map(s=>s.lat.toFixed(5)+","+s.lng.toFixed(5)).join("|")).join(";;");const p=(d.pois||[]).map(x=>x.type+":"+x.lat.toFixed(5)+","+x.lng.toFixed(5)+":"+(x.name||"")+":"+(x.note||"")).join(";;");return (d.name||"")+"##"+t+"##"+p;}catch(e){return JSON.stringify(d);}}
 function getRoom(){const m=(location.hash||"").match(/room=([a-z0-9]+)/i);return m?m[1]:null;}
 function renderPresence(){
   const chips=$("liveOnline");if(chips){chips.innerHTML="";const now0=Date.now();Object.entries(presenceData).forEach(([id,p])=>{if(!p)return;if(p.t&&now0-p.t>30000)return;const el=document.createElement("span");el.className="online-chip";el.innerHTML=`<span class="dotc" style="background:${p.color}"></span>${(id===clientId?(p.name||"Ty")+" (Ty)":(p.name||"Gość")).replace(/</g,"&lt;")}`;chips.appendChild(el);});}
@@ -679,10 +680,10 @@ async function startLive(){
   liveHeartbeat=setInterval(()=>{if(myPresRef)myPresRef.update({t:Date.now()}).catch(()=>{});},5000);
   cursorLayer=L.layerGroup().addTo(map);
   map.on("mousemove",liveCursorMove);
-  roomRef.once("value").then(snap=>{const d=snap.val();if(d){applyingRemote=true;loadProject(d,true).then(()=>{applyingRemote=false;lastSentJSON=JSON.stringify(serialize());});}else{lastSentJSON=JSON.stringify(serialize());roomRef.set(serialize());}}).catch(e=>liveStat("❌ Nie mogę odczytać pokoju: "+e.message,"err"));
-  roomRef.on("value",snap=>{const d=snap.val();if(!d)return;const js=JSON.stringify(d);if(js===lastSentJSON)return;applyingRemote=true;loadProject(d,true).then(()=>{applyingRemote=false;lastSentJSON=js;});});
+  roomRef.once("value").then(snap=>{const d=snap.val();if(d){applyingRemote=true;loadProject(d,true).then(()=>{applyingRemote=false;lastSentSig=projectSig(d);});}else{lastSentSig=projectSig(serialize());roomRef.set(serialize());}}).catch(e=>liveStat("❌ Nie mogę odczytać pokoju: "+e.message,"err"));
+  roomRef.on("value",snap=>{const d=snap.val();if(!d)return;const sig=projectSig(d);if(sig===lastSentSig)return;applyingRemote=true;loadProject(d,true).then(()=>{applyingRemote=false;lastSentSig=sig;});});
   presRef.on("value",snap=>{presenceData=snap.val()||{};renderPresence();});
-  setInterval(()=>{if(!live||applyingRemote)return;const js=JSON.stringify(serialize());if(js!==lastSentJSON){lastSentJSON=js;if(roomRef)roomRef.set(serialize());}},1500);
+  setInterval(()=>{if(!live||applyingRemote)return;const data=serialize();const sig=projectSig(data);if(sig!==lastSentSig){lastSentSig=sig;if(roomRef)roomRef.set(data);}},1500);
   live=true;
   $("liveBtn").textContent="🟢 Współpraca aktywna";
   $("liveLink").value=location.origin+location.pathname+"#room="+room;
