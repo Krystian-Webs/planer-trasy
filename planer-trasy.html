@@ -183,6 +183,7 @@
         <div class="lbl">Współpraca na żywo</div>
         <input id="liveName" type="text" class="fld" placeholder="Twoje imię (widoczne dla wspólnika)" style="margin-bottom:8px">
         <button class="btn primary" id="liveBtn">🟢 Włącz współpracę na żywo</button>
+        <div id="liveStatus" style="display:none;margin-top:8px;font-size:12px;padding:6px 9px;border-radius:7px;line-height:1.4"></div>
         <div id="liveWrap" style="display:none;margin-top:8px">
           <div id="liveOnline" style="margin-bottom:8px"></div>
           <input id="liveLink" class="fld" type="text" readonly style="font-size:12px">
@@ -488,9 +489,17 @@ function makeShareLink(){
 }
 function loadFromHash(){
   const h=location.hash||"";
-  if(h.indexOf("#p=")!==0)return;
-  try{const data=JSON.parse(LZString.decompressFromEncodedURIComponent(h.slice(3)));if(data){loadProject(data);toast("Wczytano projekt z linku.");}}catch(e){toast("Nie udało się odczytać projektu z linku.");}
+  if(h.indexOf("#p=")===0){
+    try{const data=JSON.parse(LZString.decompressFromEncodedURIComponent(h.slice(3)));if(data){loadProject(data);toast("Wczytano projekt z linku.");return;}}catch(e){toast("Nie udało się odczytać projektu z linku.");}
+  }
+  // brak linku z projektem i brak pokoju -> spróbuj wczytać autozapis z tego urządzenia
+  if(h.indexOf("#room=")!==0){
+    try{const saved=localStorage.getItem("planer_autosave");if(saved){const d=JSON.parse(saved);if(d&&((d.stops&&d.stops.length)||(d.pois&&d.pois.length))){loadProject(d);toast("Przywrócono ostatni projekt z tego urządzenia.");}}}catch(e){}
+  }
 }
+// autozapis co 4 s, jeśli coś się zmieniło (działa tylko lokalnie na tym urządzeniu)
+let lastAutosave="";
+setInterval(()=>{try{if(typeof serialize!=="function")return;const js=JSON.stringify(serialize());if(js!==lastAutosave){lastAutosave=js;localStorage.setItem("planer_autosave",js);}}catch(e){}},4000);
 $("shareBtn").onclick=makeShareLink;
 $("copyLinkBtn").onclick=async()=>{const i=$("shareLink");i.select();try{await navigator.clipboard.writeText(i.value);}catch(e){try{document.execCommand("copy");}catch(_){}}toast("Skopiowano link.");};
 
@@ -579,21 +588,28 @@ function renderPresence(){
   Object.entries(presenceData).forEach(([id,p])=>{if(id===clientId||!p||p.cx==null)return;if(now-(p.t||0)>15000)return;L.marker([p.cy,p.cx],{icon:L.divIcon({className:"",iconSize:null,html:`<div style="transform:translate(-4px,-4px)"><div style="width:14px;height:14px;border-radius:50%;background:${p.color};border:2px solid #fff;box-shadow:0 1px 4px #0008"></div><div style="margin-top:2px;background:${p.color};color:#fff;font:700 10px sans-serif;padding:1px 6px;border-radius:6px;white-space:nowrap;box-shadow:0 1px 4px #0006">${(p.name||"Gość").replace(/</g,"&lt;")}</div></div>`}),interactive:false}).addTo(cursorLayer);});
 }
 function liveCursorMove(e){const now=Date.now();if(now-cursorThrottle<120||!myPresRef)return;cursorThrottle=now;myPresRef.update({cx:e.latlng.lng,cy:e.latlng.lat,t:now});}
+function liveStat(msg,kind){const s=$("liveStatus");if(!s)return;s.style.display="block";const c=kind==="ok"?["#13351f","#33c27a"]:kind==="err"?["#3a1318","#ff6b6b"]:["#2a2410","#f4b43d"];s.style.background=c[0];s.style.color=c[1];s.innerHTML=msg;}
 async function startLive(){
   if(live)return;
   if(!FIREBASE_CONFIG.apiKey){alert("Aby włączyć współpracę na żywo, trzeba najpierw raz skonfigurować darmowy Firebase i wkleić dane do pliku. Poproś asystenta o instrukcję.");return;}
-  try{if(typeof firebase==="undefined")throw 0;if(!firebase.apps.length)firebase.initializeApp(FIREBASE_CONFIG);fdb=firebase.database();}catch(e){toast("Nie udało się połączyć z Firebase.");return;}
+  liveStat("⏳ Łączę z Firebase…","wait");
+  if(typeof firebase==="undefined"){liveStat("❌ Nie wczytały się biblioteki Firebase.<br>Kliknij u góry „🔄 Odśwież / pobierz najnowszą wersję”, potem spróbuj ponownie.","err");return;}
+  try{if(!firebase.apps.length)firebase.initializeApp(FIREBASE_CONFIG);fdb=firebase.database();}catch(e){liveStat("❌ Błąd Firebase: "+(e&&e.message?e.message:e),"err");return;}
   let room=getRoom();if(!room){room=Math.random().toString(36).slice(2,10);location.hash="room="+room;}
   myColor=LIVE_PALETTE[Math.floor(Math.random()*LIVE_PALETTE.length)];
   const myName=($("liveName").value||"Gość").slice(0,20);
   roomRef=fdb.ref("rooms/"+room+"/project");
   presRef=fdb.ref("rooms/"+room+"/presence");
   myPresRef=presRef.child(clientId);
-  myPresRef.set({name:myName,color:myColor,t:Date.now()});
+  fdb.ref(".info/connected").on("value",snap=>{
+    if(snap.val()===true){liveStat("✅ Połączono. Pokój: <b>"+room+"</b><br>Wyślij link wspólnikowi.","ok");}
+    else{liveStat("⏳ Łączę z bazą…","wait");}
+  });
+  myPresRef.set({name:myName,color:myColor,t:Date.now()}).catch(e=>liveStat("❌ Brak dostępu do bazy: "+e.message+"<br>(sprawdź tryb testowy reguł w Firebase)","err"));
   myPresRef.onDisconnect().remove();
   cursorLayer=L.layerGroup().addTo(map);
   map.on("mousemove",liveCursorMove);
-  roomRef.once("value").then(snap=>{const d=snap.val();if(d){applyingRemote=true;loadProject(d,true).then(()=>{applyingRemote=false;lastSentJSON=JSON.stringify(serialize());});}else{lastSentJSON=JSON.stringify(serialize());roomRef.set(serialize());}});
+  roomRef.once("value").then(snap=>{const d=snap.val();if(d){applyingRemote=true;loadProject(d,true).then(()=>{applyingRemote=false;lastSentJSON=JSON.stringify(serialize());});}else{lastSentJSON=JSON.stringify(serialize());roomRef.set(serialize());}}).catch(e=>liveStat("❌ Nie mogę odczytać pokoju: "+e.message,"err"));
   roomRef.on("value",snap=>{const d=snap.val();if(!d)return;const js=JSON.stringify(d);if(js===lastSentJSON)return;applyingRemote=true;loadProject(d,true).then(()=>{applyingRemote=false;lastSentJSON=js;});});
   presRef.on("value",snap=>{presenceData=snap.val()||{};renderPresence();});
   setInterval(()=>{if(!live||applyingRemote)return;const js=JSON.stringify(serialize());if(js!==lastSentJSON){lastSentJSON=js;if(roomRef)roomRef.set(serialize());}},1500);
@@ -601,7 +617,6 @@ async function startLive(){
   $("liveBtn").textContent="🟢 Współpraca aktywna";
   $("liveLink").value=location.origin+location.pathname+"#room="+room;
   $("liveWrap").style.display="block";
-  toast("Współpraca włączona — wyślij link wspólnikowi.");
 }
 $("liveBtn").onclick=startLive;
 $("liveCopyBtn").onclick=async()=>{const i=$("liveLink");i.select();try{await navigator.clipboard.writeText(i.value);}catch(e){}toast("Skopiowano link.");};
