@@ -243,17 +243,7 @@
       <div class="group">
         <div class="lbl">Stawiaj punkty na mapie</div>
         <p class="hint" style="margin-top:0;margin-bottom:9px">Wybierz typ, potem kliknij na mapie lub użyj wyszukiwarki u góry.</p>
-        <div class="chips" id="poiChips">
-          <button class="chip on" data-type="checkpoint"><span class="ic">🔵</span>Pkt kontrolny</button>
-          <button class="chip" data-type="water"><span class="ic">💧</span>Punkt wody</button>
-          <button class="chip" data-type="food"><span class="ic">🍌</span>Odżywianie</button>
-          <button class="chip" data-type="timing"><span class="ic">⏱️</span>Pomiar czasu</button>
-          <button class="chip" data-type="wc"><span class="ic">🚻</span>Toaleta</button>
-          <button class="chip" data-type="medic"><span class="ic">➕</span>Pomoc med.</button>
-          <button class="chip" data-type="ambulance"><span class="ic">🚑</span>Karetka</button>
-          <button class="chip" data-type="marshal"><span class="ic">🦺</span>Stewart</button>
-          <button class="chip" data-type="poi"><span class="ic">⭐</span>Inne</button>
-        </div>
+        <div class="chips" id="poiChips"></div>
       </div>
       <div class="group">
         <div class="lbl">Punkty na trasie <span class="count" id="listCount">0</span></div>
@@ -301,7 +291,12 @@ const POI={
   wc:{ic:"🚻",label:"Toaleta",color:"#6c7a89"},
   medic:{ic:"➕",label:"Pomoc med.",color:"#e23b4e"},
   ambulance:{ic:"🚑",label:"Karetka",color:"#e23b4e"},
-  marshal:{ic:"🦺",label:"Stewart",color:"#f4b43d"},
+  volunteer:{ic:"🙋",label:"Wolontariusz",color:"#33c27a"},
+  police:{ic:"👮",label:"Policja",color:"#2f4fff"},
+  marshal:{ic:"🦺",label:"Służba porządkowa",color:"#f4b43d"},
+  security:{ic:"🛡️",label:"Ochrona",color:"#6c7a89"},
+  parking:{ic:"🅿️",label:"Parking",color:"#2f7bff"},
+  arrow:{ic:"➡️",label:"Kierunek / strzałka",color:"#ff6b1a"},
   poi:{ic:"⭐",label:"Punkt",color:"#ff6b1a"}
 };
 let mode="route", poiType="checkpoint", snap=true, showKm=false;
@@ -693,6 +688,7 @@ $("liveBtn").onclick=startLive;
 $("liveCopyBtn").onclick=async()=>{const i=$("liveLink");i.select();try{await navigator.clipboard.writeText(i.value);}catch(e){}toast("Skopiowano link.");};
 
 if(!tracks.length){activeTrack=newTrack("Trasa 1",TRACK_COLORS[0]);stops=activeTrack.stops;}
+(function buildChips(){const wrap=$("poiChips");if(!wrap)return;wrap.innerHTML="";Object.keys(POI).forEach(type=>{const b=document.createElement("button");b.className="chip"+(type===poiType?" on":"");b.dataset.type=type;b.innerHTML=`<span class="ic">${POI[type].ic}</span>${POI[type].label}`;wrap.appendChild(b);});})();
 renderTrackList();
 renderStops();updateStats();searchInfoText();
 $("fitBtn").onclick=fitToRoute;
