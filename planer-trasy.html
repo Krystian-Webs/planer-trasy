@@ -845,28 +845,87 @@ function renderMapToCanvas(scale){
   return {canvas:c, cssWidth:w, cssHeight:h};
 }
 
+// Wysokości z Open-Meteo dla wszystkich tras łącznie — przewyższenia, min/max
+async function fetchElevationStats(){
+  // Zbierz próbki z każdej trasy (max ~80 pkt łącznie)
+  const all=[];
+  tracks.forEach(t=>{ if(t.geometry&&t.geometry.length>=2) all.push(t.geometry); });
+  if(!all.length) return null;
+  const total=all.reduce((a,g)=>a+g.length,0);
+  const budget=90;
+  const step=Math.max(1, Math.ceil(total/budget));
+  const perTrack=[];
+  const flat=[];
+  all.forEach(g=>{
+    const sampled=[];
+    for(let i=0;i<g.length;i+=step) sampled.push(g[i]);
+    if(sampled[sampled.length-1]!==g[g.length-1]) sampled.push(g[g.length-1]);
+    perTrack.push(sampled.length);
+    sampled.forEach(p=>flat.push(p));
+  });
+  if(flat.length<2) return null;
+  try{
+    const lats=flat.map(p=>p[0].toFixed(5)).join(",");
+    const lngs=flat.map(p=>p[1].toFixed(5)).join(",");
+    const r=await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${lats}&longitude=${lngs}`);
+    if(!r.ok) return null;
+    const j=await r.json();
+    const e=j.elevation;
+    if(!Array.isArray(e)||e.length!==flat.length) return null;
+    // Przewyższenia liczone osobno na każdej trasie (żeby nie łączyć skoków między trasami)
+    let gain=0, loss=0, min=Infinity, max=-Infinity;
+    let idx=0;
+    perTrack.forEach(n=>{
+      for(let i=0;i<n;i++){
+        const v=e[idx+i];
+        if(v<min) min=v; if(v>max) max=v;
+        if(i>0){ const d=v-e[idx+i-1]; if(d>0) gain+=d; else loss+=(-d); }
+      }
+      idx+=n;
+    });
+    return {gain:Math.round(gain), loss:Math.round(loss), min:Math.round(min), max:Math.round(max)};
+  }catch(e){ return null; }
+}
+
+// Dopasowanie widoku do trasy z małym marginesem, bez animacji — do eksportu
+function fitToRouteForExport(){
+  const all=[];
+  tracks.forEach(t=>{ if(t.geometry) t.geometry.forEach(g=>all.push(L.latLng(g[0],g[1]))); });
+  if(!all.length) return;
+  map.invalidateSize();
+  const b=L.latLngBounds(all);
+  map.fitBounds(b, {padding:[36,36], animate:false, maxZoom:18});
+}
+
 async function exportPNG(){
   const anyGeom=tracks.some(t=>t.geometry&&t.geometry.length>=2);
   if(!anyGeom){ toast("Najpierw narysuj trasę."); return; }
   const btn=$("pngBtn"); const oldTxt=btn.textContent; btn.disabled=true; btn.textContent="⏳ Renderuję…";
+  // Zapamiętaj bieżący widok, żeby przywrócić po eksporcie
+  const prevCenter=map.getCenter(), prevZoom=map.getZoom();
   try{
-    // 1) Dopasuj widok do trasy i poczekaj na kafle
-    try{ fitToRoute(); }catch(e){}
-    await new Promise(r=>setTimeout(r,900));
+    // 1) Zbliż widok mocno do trasy i poczekaj na kafle
+    fitToRouteForExport();
+    await new Promise(r=>setTimeout(r,1000));
     // 2) Chwilowo ukryj markery POI i punkty tras (chcemy „czystą” mapę)
     const hidden=[];
     document.querySelectorAll("#map .leaflet-marker-pane img, #map .leaflet-marker-pane .leaflet-marker-icon, #map .leaflet-marker-pane div").forEach(el=>{ if(el.style.visibility!=="hidden"){ hidden.push(el); el.style.visibility="hidden"; }});
     document.querySelectorAll("#map .leaflet-tooltip-pane, #map .leaflet-popup-pane").forEach(el=>{ hidden.push(el); const prev=el.style.visibility; el.dataset._prevVis=prev; el.style.visibility="hidden"; });
     await new Promise(r=>setTimeout(r,60));
-    // 3) Pobierz nazwy ulic (rownolegle z renderowaniem mapy)
-    const [streets,rendered]=await Promise.all([ gatherStreetNames().catch(()=>[]), Promise.resolve(renderMapToCanvas(2)) ]);
+    // 3) Równolegle: ulice, wysokości, render mapy
+    const [streets,elev,rendered]=await Promise.all([
+      gatherStreetNames().catch(()=>[]),
+      fetchElevationStats().catch(()=>null),
+      Promise.resolve(renderMapToCanvas(2))
+    ]);
     // 4) Odsłoń z powrotem
     hidden.forEach(el=>{ el.style.visibility=""; });
-    // 5) Skomponuj końcowy obraz: nagłówek + mapa + lista ulic + stopka
+    // 5) Skomponuj końcowy obraz: nagłówek + pasek statystyk + mapa + lista ulic + stopka
     const mapCanvas=rendered.canvas;
     const mapW=mapCanvas.width, mapH=mapCanvas.height;
     const S=2; // skala HiDPI
-    const headerH=110*S;
+    const headerH=100*S;
+    const statsH=90*S;
     const footerH=44*S;
     const sidePad=28*S;
     // Ułóż ulice w kolumnach
@@ -879,7 +938,7 @@ async function exportPNG(){
     const rowH=22*S;
     const rows=Math.ceil((streets.length||1)/colCount);
     const streetsBoxH=streets.length? (24*S + rows*rowH + 20*S) : 0;
-    const totalH=headerH+mapH+streetsBoxH+footerH;
+    const totalH=headerH+statsH+mapH+streetsBoxH+footerH;
     const finalC=document.createElement("canvas");
     finalC.width=mapW; finalC.height=totalH;
     const fx=finalC.getContext("2d");
@@ -891,28 +950,92 @@ async function exportPNG(){
     fx.fillStyle=grad; fx.fillRect(0,0,mapW,headerH);
     // Tytuł
     fx.fillStyle="#fff"; fx.textAlign="left"; fx.textBaseline="alphabetic";
-    fx.font=`bold ${34*S}px 'Space Grotesk', system-ui, sans-serif`;
+    fx.font=`bold ${36*S}px 'Space Grotesk', system-ui, sans-serif`;
     const projName=($("projName").value||"Trasa").trim();
-    fx.fillText(projName, sidePad, 46*S);
-    // Podtytuł: dystans + liczba tras
-    const sumKm=tracks.reduce((a,t)=>a+(t.meters||0),0)/1000;
-    const sub=`Dystans: ${sumKm.toFixed(2).replace(".",",")} km`+(tracks.length>1?` · ${tracks.length} tras`:"");
-    fx.font=`${18*S}px 'Space Grotesk', system-ui, sans-serif`;
-    fx.fillText(sub, sidePad, 78*S);
-    // Data
+    fx.fillText(projName, sidePad, 52*S);
+    // Podtytuł: liczba tras + punkty
+    const cpCount=pois.filter(p=>p.type==="checkpoint").length;
+    const parts=[];
+    if(tracks.length>1) parts.push(`${tracks.length} tras`);
+    if(cpCount>0) parts.push(`${cpCount} punktów kontrolnych`);
+    if(pois.length>cpCount) parts.push(`${pois.length-cpCount} innych punktów`);
+    const sub=parts.length? parts.join(" · ") : "Plan trasy";
+    fx.font=`${16*S}px 'Space Grotesk', system-ui, sans-serif`;
+    fx.fillStyle="rgba(255,255,255,.92)";
+    fx.fillText(sub, sidePad, 80*S);
+    // Data i marka
     const now=new Date();
     const dt=now.toLocaleDateString("pl-PL",{year:"numeric",month:"long",day:"numeric"});
-    fx.textAlign="right";
-    fx.font=`${16*S}px 'Space Grotesk', system-ui, sans-serif`;
-    fx.fillText(dt, mapW-sidePad, 78*S);
-    fx.font=`bold ${16*S}px 'Space Grotesk', system-ui, sans-serif`;
-    fx.fillText("Planer Trasy", mapW-sidePad, 46*S);
+    fx.textAlign="right"; fx.fillStyle="#fff";
+    fx.font=`bold ${18*S}px 'Space Grotesk', system-ui, sans-serif`;
+    fx.fillText("Planer Trasy", mapW-sidePad, 52*S);
+    fx.font=`${15*S}px 'Space Grotesk', system-ui, sans-serif`;
+    fx.fillStyle="rgba(255,255,255,.92)";
+    fx.fillText(dt, mapW-sidePad, 80*S);
+    // ===== PASEK STATYSTYK (metric chips) =====
+    const statsY=headerH;
+    fx.fillStyle="#0f1720"; fx.fillRect(0,statsY,mapW,statsH);
+    // Zbuduj listę kafelków
+    const sumKm=tracks.reduce((a,t)=>a+(t.meters||0),0)/1000;
+    const timeSec = (typeof paceSec==="number" && sumKm>0) ? sumKm*paceSec : null;
+    const chips=[];
+    chips.push({lab:"Dystans", val:sumKm.toFixed(2).replace(".",",")+" km", ic:"📏"});
+    if(elev){
+      chips.push({lab:"Przewyższenie ↑", val:"+"+elev.gain+" m", ic:"⛰"});
+      chips.push({lab:"Przewyższenie ↓", val:"−"+elev.loss+" m", ic:"⬇"});
+      chips.push({lab:"Wysokość", val:elev.min+"–"+elev.max+" m n.p.m.", ic:"📊"});
+    }
+    if(timeSec){
+      chips.push({lab:"Szacowany czas", val:fmtDur(timeSec), ic:"⏱"});
+      chips.push({lab:"Tempo", val:fmtPace(paceSec)+" /km", ic:"🏃"});
+    }
+    if(cpCount>0) chips.push({lab:"Punkty kontrolne", val:String(cpCount), ic:"🚩"});
+    // Rozłóż kafelki równomiernie
+    const chipCount=chips.length;
+    const chipGap=12*S;
+    const availW=mapW-sidePad*2;
+    const chipW=Math.floor((availW-chipGap*(chipCount-1))/chipCount);
+    const chipH=64*S;
+    const chipY=statsY+(statsH-chipH)/2;
+    chips.forEach((c,i)=>{
+      const cx=sidePad+i*(chipW+chipGap);
+      // Karta
+      fx.fillStyle="#1a2432";
+      const r=10*S;
+      // Prostokąt z zaokrąglonymi rogami
+      fx.beginPath();
+      fx.moveTo(cx+r,chipY);
+      fx.lineTo(cx+chipW-r,chipY);
+      fx.quadraticCurveTo(cx+chipW,chipY,cx+chipW,chipY+r);
+      fx.lineTo(cx+chipW,chipY+chipH-r);
+      fx.quadraticCurveTo(cx+chipW,chipY+chipH,cx+chipW-r,chipY+chipH);
+      fx.lineTo(cx+r,chipY+chipH);
+      fx.quadraticCurveTo(cx,chipY+chipH,cx,chipY+chipH-r);
+      fx.lineTo(cx,chipY+r);
+      fx.quadraticCurveTo(cx,chipY,cx+r,chipY);
+      fx.closePath();
+      fx.fill();
+      // Akcent
+      fx.fillStyle="#ff6b1a";
+      fx.fillRect(cx,chipY,3*S,chipH);
+      // Etykieta
+      fx.fillStyle="#8fa0b0"; fx.textAlign="left"; fx.textBaseline="alphabetic";
+      fx.font=`${11*S}px 'Space Grotesk', system-ui, sans-serif`;
+      const lab=c.ic+" "+c.lab.toUpperCase();
+      fx.fillText(lab, cx+14*S, chipY+22*S);
+      // Wartość — dopasuj rozmiar czcionki
+      fx.fillStyle="#fff";
+      let fs=22*S;
+      fx.font=`bold ${fs}px 'Space Grotesk', system-ui, sans-serif`;
+      while(fx.measureText(c.val).width>chipW-28*S && fs>12*S){ fs-=1*S; fx.font=`bold ${fs}px 'Space Grotesk', system-ui, sans-serif`; }
+      fx.fillText(c.val, cx+14*S, chipY+chipH-16*S);
+    });
     // Mapa
-    fx.drawImage(mapCanvas, 0, headerH);
+    fx.drawImage(mapCanvas, 0, headerH+statsH);
     // Cienka ramka pod mapą
-    fx.strokeStyle="rgba(0,0,0,.12)"; fx.lineWidth=1; fx.strokeRect(0,headerH,mapW,mapH);
+    fx.strokeStyle="rgba(0,0,0,.12)"; fx.lineWidth=1; fx.strokeRect(0,headerH+statsH,mapW,mapH);
     // Sekcja ulic
-    let yy=headerH+mapH;
+    let yy=headerH+statsH+mapH;
     if(streets.length){
       fx.fillStyle="#f6f7f9"; fx.fillRect(0,yy,mapW,streetsBoxH);
       fx.fillStyle="#0a0e13"; fx.textAlign="left"; fx.textBaseline="alphabetic";
@@ -939,7 +1062,7 @@ async function exportPNG(){
     fx.fillStyle="#0a0e13"; fx.fillRect(0,fy,mapW,footerH);
     fx.fillStyle="#8fa0b0"; fx.textAlign="center"; fx.textBaseline="middle";
     fx.font=`${13*S}px 'Space Grotesk', system-ui, sans-serif`;
-    fx.fillText("© OpenStreetMap · CARTO · wygenerowano w Planerze Trasy", mapW/2, fy+footerH/2);
+    fx.fillText("© OpenStreetMap · CARTO · dane wysokości: Open-Meteo · wygenerowano w Planerze Trasy", mapW/2, fy+footerH/2);
     // 6) Pobierz
     finalC.toBlob(blob=>{
       if(!blob){ toast("Nie udało się wygenerować PNG. Spróbuj ponownie."); return; }
@@ -953,6 +1076,8 @@ async function exportPNG(){
     console.error(err);
     toast("Błąd eksportu PNG: "+(err&&err.message||err));
   }finally{
+    // Przywróć widok mapy sprzed eksportu
+    try{ map.setView(prevCenter, prevZoom, {animate:false}); }catch(e){}
     btn.disabled=false; btn.textContent=oldTxt;
     try{ updateStats(); }catch(e){}
   }
