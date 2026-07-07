@@ -1240,7 +1240,24 @@ window.addEventListener("appinstalled",()=>{$("installGroup").style.display="non
   const standalone=window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone===true;
   if(isIOS&&!standalone)$("iosHintGroup").style.display="block";
 })();
-if("serviceWorker" in navigator){window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));}
+if("serviceWorker" in navigator){
+  window.addEventListener("load",()=>{
+    navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}).then(reg=>{
+      // Sprawdź aktualizację natychmiast po rejestracji
+      reg.update().catch(()=>{});
+      // Nasłuchuj na nową wersję i przeładuj stronę automatycznie
+      reg.addEventListener("updatefound",()=>{
+        const nw=reg.installing; if(!nw) return;
+        nw.addEventListener("statechange",()=>{
+          if(nw.state==="activated" && navigator.serviceWorker.controller){
+            // Nowa wersja przejęła kontrolę — odśwież raz, żeby wczytać świeży kod
+            location.reload();
+          }
+        });
+      });
+    }).catch(()=>{});
+  });
+}
 function fixSize(){map.invalidateSize();}
 window.addEventListener("resize",fixSize);
 window.addEventListener("orientationchange",()=>setTimeout(fixSize,300));
