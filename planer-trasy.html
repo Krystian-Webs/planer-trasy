@@ -170,6 +170,7 @@
   .poiItem textarea{min-height:46px;resize:vertical}
   .empty{font-size:12px;color:var(--ink-dim);font-style:italic}
 
+  /* PRZESUNIĘTA HUD WYWIESZKA W LEWO */
   #searchWrap{position:fixed;top:calc(14px + var(--sat));left:404px;width:344px;z-index:1100}
   #searchBox{display:flex;align-items:center;gap:8px;background:var(--panel);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:1px solid var(--line-soft);border-radius:var(--r);padding:0 13px;box-shadow:var(--shadow)}
   #searchBox input{flex:1;background:transparent;border:0;color:var(--ink);padding:13px 0;outline:none;font-family:var(--font)}
@@ -214,7 +215,7 @@
   .planCard .tag{position:absolute;top:-9px;right:12px;background:linear-gradient(135deg,var(--accent-2),var(--accent));color:#fff;font-size:9.5px;font-weight:700;letter-spacing:.6px;padding:3px 10px;border-radius:99px;text-transform:uppercase}
   .plansClose{position:sticky;bottom:0;margin-top:14px}
   
-  #observerHud{display:none;position:fixed;top:calc(14px + var(--sat));left:14px;background:var(--panel);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:1px solid var(--line-soft);border-radius:var(--r);padding:12px 16px;box-shadow:var(--shadow);z-index:1100;max-width:320px}
+  #observerHud{display:none;position:fixed;top:calc(14px + var(--sat));left:76px;background:var(--panel);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:1px solid var(--line-soft);border-radius:var(--r);padding:12px 16px;box-shadow:var(--shadow);z-index:1100;max-width:320px}
   #observerHud h2{font-size:14px;font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:6px}
   #observerHud p{font-size:12px;color:var(--ink-dim)}
 
@@ -222,12 +223,44 @@
   #threeMap{position:absolute;inset:0}
   #threeClose{position:absolute;top:calc(14px + env(safe-area-inset-top,0px));left:14px;z-index:5001;background:#141a22;color:#fff;border:1px solid #2a3542;border-radius:12px;padding:11px 15px;font-weight:700;cursor:pointer;font-family:inherit}
 
+  /* NOWY PANEL AWATARA W LEWYM GÓRNYM ROGU */
+  #userProfileTab {
+    position: fixed;
+    top: calc(14px + var(--sat));
+    left: 14px;
+    z-index: 1100;
+  }
+  .avatar-btn {
+    width: 46px;
+    height: 46px;
+    border-radius: 50%;
+    background: var(--panel-solid);
+    border: 2px solid var(--accent);
+    box-shadow: var(--shadow-sm);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    overflow: hidden;
+    transition: transform 0.15s, border-color 0.15s;
+  }
+  .avatar-btn:hover {
+    transform: scale(1.05);
+    border-color: var(--accent-2);
+  }
+  .avatar-btn img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
   @media (max-width:820px){
     #panel{top:auto;left:0;right:0;bottom:0;width:auto;max-height:62vh;border-right:0;border-top:1px solid var(--line-soft);border-radius:22px 22px 0 0;box-shadow:0 -8px 30px rgba(0,0,0,.55)}
     #panel .grab{display:block;width:44px;height:5px;border-radius:99px;background:var(--line);margin:9px auto 0}
     #panel header{padding:8px 16px 12px}
     #panel .scroll{padding-bottom:calc(26px + var(--sab))}
-    #searchWrap{left:10px;right:10px;width:auto;top:calc(8px + var(--sat))}
+    #searchWrap{left:10px;right:10px;width:auto;top:calc(68px + var(--sat))}
     .modeseg button{padding:10px 8px;font-size:14px}
     #searchBox{padding:0 12px}
     #searchBox input{font-size:15px;padding:11px 0}
@@ -235,7 +268,8 @@
     .distbadge{font-size:12px;padding:6px 11px}
     .leaflet-top.leaflet-right{top:calc(150px + var(--sat))}
     .leaflet-control-zoom a{width:40px!important;height:40px!important;line-height:40px!important;font-size:22px!important}
-    #observerHud{left:10px;right:10px;max-width:none;top:calc(8px + var(--sat))}
+    #observerHud{left:76px;right:10px;max-width:none;top:calc(14px + var(--sat))}
+    #userProfileTab{left:10px;top:calc(10px + var(--sat))}
   }
   @media (prefers-reduced-motion:reduce){
     *,*::before,*::after{transition:none!important;animation:none!important}
@@ -245,9 +279,9 @@
 <body>
   <div id="map"></div>
 
-  <!-- PRZYCISK PROFILU -->
-  <div id="userProfileTab" style="position:fixed; top:calc(14px + var(--sat)); right:110px; z-index:1100;">
-    <button class="btn primary" id="openAuthBtn" style="padding:10px 16px; border-radius:99px; font-weight:700;">👤 Moje Konto</button>
+  <!-- AWATAR PROFILU W LEWYM GÓRNYM ROGU -->
+  <div id="userProfileTab">
+    <button class="avatar-btn" id="openAuthBtn" title="Moje Konto">👤</button>
   </div>
 
   <!-- MODAL PANELU KLIENTA / LOGOWANIA -->
@@ -270,10 +304,22 @@
           <button class="btn" id="logoutBtn" style="flex:none; width:auto; padding:6px 12px; font-size:11px;">Wyloguj</button>
         </div>
         <p class="sub" id="userHello">Witaj w swoim panelu!</p>
+
+        <!-- OPCJA DODANIA AWATARA W EDYCJI PROFILU -->
+        <div style="background:var(--panel-2); padding:12px; border-radius:var(--r-sm); border:1px solid var(--line); margin-bottom:16px;">
+          <h4 style="font-size:12px; text-transform:uppercase; margin-bottom:8px; color:var(--accent-2);">Twój Awatar</h4>
+          <div style="display:flex; align-items:center; gap:12px;">
+            <div id="panelAvatarPreview" style="width:50px; height:50px; border-radius:50%; background:var(--panel-solid); border:2px solid var(--line); overflow:hidden; display:flex; align-items:center; justify-content:center; font-size:22px;">👤</div>
+            <div style="flex:1;">
+              <button class="btn" onclick="$('avatarFileInput').click()" style="padding:6px 12px; font-size:12px;">Wybierz zdjęcie</button>
+              <input type="file" id="avatarFileInput" accept="image/*" style="display:none;">
+            </div>
+          </div>
+        </div>
         
         <div style="margin-top:20px;">
           <h3 style="font-size:13px; text-transform:uppercase; letter-spacing:1px; margin-bottom:10px; color:var(--accent-2)">Twoje zapisane trasy:</h3>
-          <div id="userTracksList" style="display:flex; flex-direction:column; gap:8px; max-height:250px; overflow-y:auto; margin-bottom:14px;">
+          <div id="userTracksList" style="display:flex; flex-direction:column; gap:8px; max-height:180px; overflow-y:auto; margin-bottom:14px;">
             <div class="empty">Brak zapisanych tras na Twoim koncie.</div>
           </div>
           <button class="btn primary" id="saveToCloudBtn" style="width:100%;">💾 Zapisz obecną trasę na koncie</button>
@@ -309,7 +355,6 @@
       <div class="s"><div class="v" id="poiCount">0</div><div class="k">wszystkie pkt.</div></div>
     </div>
     <div class="scroll">
-      <!-- KONTO I PLAN -->
       <div class="group">
         <div class="lbl">Konto i plan</div>
         <div class="g-content">
@@ -319,7 +364,6 @@
         </div>
       </div>
 
-      <!-- PROJEKT -->
       <div class="group">
         <div class="lbl">Projekt</div>
         <div class="g-content">
@@ -329,7 +373,6 @@
         </div>
       </div>
 
-      <!-- UDOSTĘPNIANIE -->
       <div class="group collapsed">
         <div class="lbl">Udostępnianie linkiem</div>
         <div class="g-content">
@@ -343,7 +386,6 @@
         </div>
       </div>
 
-      <!-- WSPÓŁPRACA NA ŻYWO -->
       <div class="group collapsed">
         <div class="lbl">Współpraca na żywo</div>
         <div class="g-content">
@@ -359,7 +401,6 @@
         </div>
       </div>
 
-      <!-- TRASY / WARIANTY -->
       <div class="group">
         <div class="lbl">Trasy (warianty / kolory)</div>
         <div class="g-content">
@@ -369,7 +410,6 @@
         </div>
       </div>
 
-      <!-- ADRESY I PRZYSTANKI -->
       <div class="group">
         <div class="lbl">Trasa — punkty i adresy</div>
         <div class="g-content">
@@ -379,7 +419,6 @@
         </div>
       </div>
 
-      <!-- DYSTANS DOCELOWY -->
       <div class="group">
         <div class="lbl">Dystans docelowy</div>
         <div class="g-content">
@@ -399,7 +438,6 @@
         </div>
       </div>
 
-      <!-- TEMPO I CZAS -->
       <div class="group collapsed">
         <div class="lbl">Szacowany czas i tempo</div>
         <div class="g-content">
@@ -417,7 +455,6 @@
         </div>
       </div>
 
-      <!-- AUTOMATYKA PUNKTÓW -->
       <div class="group collapsed">
         <div class="lbl">Automatyczne rozmieszczanie</div>
         <div class="g-content">
@@ -426,7 +463,6 @@
         </div>
       </div>
 
-      <!-- STAWIANIE POI -->
       <div class="group">
         <div class="lbl">Ikony i typy punktów</div>
         <div class="g-content">
@@ -434,7 +470,6 @@
         </div>
       </div>
 
-      <!-- LISTA POI -->
       <div class="group">
         <div class="lbl">Punkty na trasie <span class="count" id="listCount">0</span></div>
         <div class="g-content">
@@ -443,7 +478,6 @@
         </div>
       </div>
 
-      <!-- PROFIL I WYSOKOŚĆ -->
       <div class="group collapsed">
         <div class="lbl">Profil wysokościowy</div>
         <div class="g-content">
@@ -455,7 +489,6 @@
         </div>
       </div>
 
-      <!-- 3D I EKSPORT -->
       <div class="group collapsed">
         <div class="lbl">Wizualizacja 3D i Eksport</div>
         <div class="g-content">
@@ -546,7 +579,6 @@ const FIREBASE_CONFIG = {
   appId: "1:135831786286:web:436ada01c7b7dcb0b9e0bf"
 };
 
-// Zainicjowanie Firebase i jego modułów przed wywołaniem innych funkcji
 if(!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
 const fauth = firebase.auth();
 let fdb = firebase.database();
@@ -595,7 +627,7 @@ function moveStop(i,dir){const j=i+dir;if(j<0||j>=stops.length)return;const t=st
 function renderTrackList(){const wrap=$("trackList");if(!wrap)return;wrap.innerHTML="";tracks.forEach(t=>{const isAct=activeTrack&&t.id===activeTrack.id;const row=document.createElement("div");row.className="trackrow"+(isAct?" act":"");const km=(t.meters/1000).toFixed(2).replace(".",",");row.innerHTML=`<span class="dotc" style="background:${t.color};cursor:pointer;width:12px;height:12px;border-radius:50%;flex:none;margin-left:4px"></span><input class="tname fld" value="${(t.name||"").replace(/"/g,"&quot;")}" style="flex:1;min-width:0"><span class="tkm" style="font-size:12px;color:#8fa0b0;white-space:nowrap">${km} km</span>`;const nameInp=row.querySelector(".tname");nameInp.onchange=()=>{t.name=nameInp.value;updateTargetSummary();};nameInp.onclick=e=>e.stopPropagation();const actBtn=document.createElement("button");actBtn.className="mv";actBtn.textContent=isAct?"✏️":"✎";actBtn.title="Edytuj";actBtn.onclick=e=>{e.stopPropagation();setActiveTrack(t.id);};row.appendChild(actBtn);if(tracks.length>1){const delBtn=document.createElement("button");delBtn.className="rm";delBtn.textContent="✕";delBtn.onclick=e=>{e.stopPropagation();removeTrack(t.id);};row.appendChild(delBtn);}row.querySelector(".dotc").onclick=()=>setActiveTrack(t.id);wrap.appendChild(row);});}
 function addTrackUI(){const t=newTrack();setActiveTrack(t.id);toast("Dodano nową trasę.");}
 function removeTrack(id){if(tracks.length<=1){toast("To jedyna trasa.");return;}const t=tracks.find(x=>x.id===id);if(!t)return;if(t.line)map.removeLayer(t.line);t.stops.forEach(s=>{if(s.marker)map.removeLayer(s.marker);});const wasActive=activeTrack&&activeTrack.id===id;
-  tracks=tracks.filter(x=>x.id!==id); // Poprawiona literówka (było x!==id)
+  tracks=tracks.filter(x=>x.id!==id);
   if(wasActive){activeTrack=null;setActiveTrack(tracks[0].id);}else{renderTrackList();}toast("Usunięto trasę.");}
 async function placeRouteStop(latlng,address){ensureEndpoints();let s;if(!stops[0].latlng)s=stops[0];else if(!stops[stops.length-1].latlng)s=stops[stops.length-1];else{s={id:idSeq++,latlng:null,address:"",marker:null};stops.push(s);}s.latlng=latlng;if(s.marker)s.marker.setLatLng(latlng);else makeStopMarker(s);s.address=address||await reverseGeocode(latlng);renderStops();rebuildRoute();}
 
@@ -742,7 +774,7 @@ function updateTarget(){
   const diff=totalMeters-target;
   if(Math.abs(diff)<=20){st.innerHTML=`✅ Aktywna ma dokładnie ${fmtkm(targetKm)} km.`;st.style.color="#33c27a";}
   else if(diff<0){st.innerHTML=`Aktywna: <b>${cur} km</b> — brakuje <b>${Math.round(-diff)} m</b>.`;st.style.color="";}
-  else{st.innerHTML=`Aktywna: <b>${cur} km</b> — o <b>${Math.round(diff)} m</b> za dużo.`;st.style.color="";}
+  else{st.innerHTML=`Masz <b>${cur} km</b> — o <b>${Math.round(diff)} m</b> za dużo.`;st.style.color="";}
   if(snapBtn)snapBtn.disabled=totalMeters<target;
 }
 if($("targetSnapBtn")) {
@@ -995,14 +1027,6 @@ async function exportPNG(){
 }
 $("pngBtn").onclick=exportPNG;
 
-// ---------- estimated time ----------
-let paceSec=360;
-function fmtPace(s){const m=Math.floor(s/60),ss=Math.round(s%60);return m+":"+String(ss).padStart(2,"0");}
-function fmtDur(s){s=Math.round(s);const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),ss=s%60;return h>0?h+":"+String(m).padStart(2,"0")+":"+String(ss).padStart(2,"0"):m+":"+String(ss).padStart(2,"0");}
-function updateTime(){const tv=$("timeVal"),ps=$("paceShow");if(!tv)return;const km=totalMeters/1000;tv.textContent=km>0?fmtDur(km*paceSec):"—";if(ps)ps.textContent=fmtPace(paceSec);}
-$("paceChips").addEventListener("click",e=>{const b=e.target.closest(".chip");if(!b)return;paceSec=+b.dataset.pace;[...e.currentTarget.children].forEach(c=>c.classList.toggle("on",c===b));updateTime();});
-$("paceSet").onclick=()=>{const v=$("paceCustom").value.trim();let s=null;if(v.indexOf(":")>=0){const p=v.split(":");s=(parseInt(p[0])||0)*60+(parseInt(p[1])||0);}if(s){paceSec=s;updateTime();}};
-
 // ---------- live collaboration (Firebase) ----------
 function deviceId(){try{let id=localStorage.getItem("planer_device");if(!id){id=Math.random().toString(36).slice(2,9);localStorage.setItem("planer_device",id);}return id;}catch(e){return "device";}}
 function deviceColor(){return LIVE_PALETTE[Math.floor(Math.random()*LIVE_PALETTE.length)];}
@@ -1049,6 +1073,41 @@ function renderPlans(){
 }
 applyPlanUI();
 
+// ---------- AWATAR PROFILU - LOGIKA SYSTEMOWA LOKALNA ----------
+function updateAvatarUI(base64Image) {
+  const btn = $("openAuthBtn");
+  const preview = $("panelAvatarPreview");
+  if (base64Image) {
+    btn.innerHTML = `<img src="${base64Image}" alt="Profil">`;
+    if(preview) preview.innerHTML = `<img src="${base64Image}" alt="Profil" style="width:100%; height:100%; object-fit:cover;">`;
+  } else {
+    btn.innerHTML = "👤";
+    if(preview) preview.innerHTML = "👤";
+  }
+}
+
+$("avatarFileInput").onchange = (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const base64 = reader.result;
+    try {
+      localStorage.setItem("planer_user_avatar", base64);
+      updateAvatarUI(base64);
+      toast("Zapisano awatar!");
+    } catch(err) {
+      toast("Zdjęcie jest zbyt duże. Wybierz mniejszy plik.");
+    }
+  };
+  reader.readAsDataURL(file);
+};
+
+// Wczytanie awatara z pamięci lokalnej przy starcie
+const savedAvatar = localStorage.getItem("planer_user_avatar");
+if (savedAvatar) updateAvatarUI(savedAvatar);
+
+
 // ---------- PANEL KLIENTA / CHMURA PROFILU ----------
 $("openAuthBtn").onclick = () => {
   $("authOverlay").style.display = "flex";
@@ -1080,16 +1139,18 @@ $("logoutBtn").onclick = () => {
 
 fauth.onAuthStateChanged(user => {
   if (user) {
-    $("openAuthBtn").textContent = "⚙️ Mój Profil";
     if ($("authOverlay").style.display === "flex") showClientPanel();
   } else {
-    $("openAuthBtn").textContent = "👤 Moje Konto";
+    // Zachowaj wizualny stan awatara lokalnego niezależnie od stanu Firebase
   }
 });
 
 function showClientPanel() {
   $("authScreen").style.display = "none"; $("clientPanelScreen").style.display = "block";
   $("userHello").textContent = `Zalogowany jako: ${fauth.currentUser.email}`;
+  // Ponowne upewnienie się, że podgląd w modalu ma świeże dane awatara
+  const currentAv = localStorage.getItem("planer_user_avatar");
+  if (currentAv && $("panelAvatarPreview")) $("panelAvatarPreview").innerHTML = `<img src="${currentAv}" style="width:100%; height:100%; object-fit:cover;">`;
   fetchUserTracks();
 }
 
