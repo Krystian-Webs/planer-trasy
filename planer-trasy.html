@@ -245,6 +245,42 @@
 <body>
   <div id="map"></div>
 
+  <div id="userProfileTab" style="position:fixed; top:calc(14px + var(--sat)); right:110px; z-index:1100;">
+    <button class="btn primary" id="openAuthBtn" style="padding:10px 16px; border-radius:99px; font-weight:700;">👤 Moje Konto</button>
+  </div>
+
+  <div id="authOverlay" style="display:none; position:fixed; inset:0; z-index:5500; background:rgba(5,8,12,.85); backdrop-filter:blur(8px); align-items:center; justify-content:center; padding:18px;">
+    <div class="plansBox" style="max-width:500px; width:100%;">
+      <div id="authScreen">
+        <h2>Zaloguj się do Planera</h2>
+        <p class="sub">Zapisuj trasy na swoim profilu, twórz warianty i zarządzaj wydarzeniami z dowolnego urządzenia.</p>
+        <input type="email" id="authEmail" class="fld" placeholder="Adres e-mail" style="margin-bottom:10px;">
+        <input type="password" id="authPassword" class="fld" placeholder="Hasło" style="margin-bottom:14px;">
+        <div class="row">
+          <button class="btn primary" id="loginBtn">Zaloguj się</button>
+          <button class="btn" id="registerBtn">Zarejestruj się</button>
+        </div>
+      </div>
+
+      <div id="clientPanelScreen" style="display:none;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+          <h2>Panel Organizatora</h2>
+          <button class="btn" id="logoutBtn" style="flex:none; width:auto; padding:6px 12px; font-size:11px;">Wyloguj</button>
+        </div>
+        <p class="sub" id="userHello">Witaj w swoim panelu!</p>
+        
+        <div style="margin-top:20px;">
+          <h3 style="font-size:13px; text-transform:uppercase; letter-spacing:1px; margin-bottom:10px; color:var(--accent-2)">Twoje zapisane trasy:</h3>
+          <div id="userTracksList" style="display:flex; flex-direction:column; gap:8px; max-height:250px; overflow-y:auto; margin-bottom:14px;">
+            <div class="empty">Brak zapisanych tras na Twoim koncie.</div>
+          </div>
+          <button class="btn primary" id="saveToCloudBtn" style="width:100%;">💾 Zapisz obecną trasę na koncie</button>
+        </div>
+      </div>
+      <button class="btn plansClose" id="closeAuthBtn" style="margin-top:20px; width:100%;">Zamknij</button>
+    </div>
+  </div>
+
   <div id="observerHud">
     <h2>👁️ Tryb Podglądu</h2>
     <p id="observerInfo">Wczytywanie trasy...</p>
@@ -262,6 +298,7 @@
     <div class="grab" id="grabBar"></div>
     <header>
       <h1><span class="dot"></span> Planer Trasy</h1>
+      <span id="refreshBtn" style="cursor:pointer; font-size:15px; margin-right:5px;" title="Odśwież aplikację">🔄</span>
       <button class="collapse" id="collapseBtn" title="Zwiń / rozwiń">▾</button>
     </header>
     <div class="summary">
@@ -276,19 +313,6 @@
           <div class="planrow"><span>Twój dostęp</span><span id="planBadge" class="planbadge">—</span></div>
           <button class="btn" id="plansBtn">⭐ Plany i dostęp do funkcji</button>
           <p class="hint">Masz teraz pełny dostęp administratora. Poziomy dostępu (Start / Pro / Organizator) są gotowe pod przyszły abonament — płatności podłączysz później w sklepach lub przez Stripe.</p>
-        </div>
-      </div>
-
-      <div class="group collapsed">
-        <div class="lbl">Opcje aplikacji</div>
-        <div class="g-content">
-          <button class="btn" id="refreshBtn">🔄 Odśwież / pobierz najnowszą wersję</button>
-          <div id="installGroup" style="display:none;margin-top:8px">
-            <button class="btn primary" id="installBtn">📲 Zainstaluj jako aplikację</button>
-          </div>
-          <div id="iosHintGroup" style="display:none;margin-top:8px">
-            <div class="distrib" style="font-size:12px;line-height:1.55">📲 <b>iPhone / iPad:</b> otwórz w Safari → przycisk „Udostępnij” <span style="opacity:.7">⬆︎</span> → <b>„Dodaj do ekranu początkowego”</b>. Aplikacja pojawi się jak z App Store.</div>
-          </div>
         </div>
       </div>
 
@@ -351,7 +375,7 @@
         <div class="lbl">Dystans docelowy</div>
         <div class="g-content">
           <div id="targetSummary" style="background:var(--panel-2);border:1px solid var(--line);border-radius:var(--r-sm);padding:10px 12px;margin-bottom:12px;font-size:12.5px;line-height:1.5">
-            <b>Dystans obecnie:</b> Loading...
+            <b>Dystans obecnie:</b> Obliczanie...
           </div>
 
           <div class="row" id="targetBtns" style="margin-bottom:8px">
@@ -447,6 +471,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 const POI={
   checkpoint:{ic:"🔵",label:"Punkt kontrolny",color:"#3da5f4"},
@@ -548,7 +573,7 @@ function renderStops(){const wrap=$("stopsList");if(!wrap)return;wrap.innerHTML=
 function moveStop(i,dir){const j=i+dir;if(j<0||j>=stops.length)return;const t=stops[i];stops[i]=stops[j];stops[j]=t;renderStops();rebuildRoute();}
 function renderTrackList(){const wrap=$("trackList");if(!wrap)return;wrap.innerHTML="";tracks.forEach(t=>{const isAct=activeTrack&&t.id===activeTrack.id;const row=document.createElement("div");row.className="trackrow"+(isAct?" act":"");const km=(t.meters/1000).toFixed(2).replace(".",",");row.innerHTML=`<span class="dotc" style="background:${t.color};cursor:pointer;width:12px;height:12px;border-radius:50%;flex:none;margin-left:4px"></span><input class="tname fld" value="${(t.name||"").replace(/"/g,"&quot;")}" style="flex:1;min-width:0"><span class="tkm" style="font-size:12px;color:#8fa0b0;white-space:nowrap">${km} km</span>`;const nameInp=row.querySelector(".tname");nameInp.onchange=()=>{t.name=nameInp.value;updateTargetSummary();};nameInp.onclick=e=>e.stopPropagation();const actBtn=document.createElement("button");actBtn.className="mv";actBtn.textContent=isAct?"✏️":"✎";actBtn.title="Edytuj";actBtn.onclick=e=>{e.stopPropagation();setActiveTrack(t.id);};row.appendChild(actBtn);if(tracks.length>1){const delBtn=document.createElement("button");delBtn.className="rm";delBtn.textContent="✕";delBtn.onclick=e=>{e.stopPropagation();removeTrack(t.id);};row.appendChild(delBtn);}row.querySelector(".dotc").onclick=()=>setActiveTrack(t.id);wrap.appendChild(row);});}
 function addTrackUI(){const t=newTrack();setActiveTrack(t.id);toast("Dodano nową trasę.");}
-function removeTrack(id){if(tracks.length<=1){toast("To jedyna trasa.");return;}const t=tracks.find(x=>x.id===id);if(!t)return;if(t.line)map.removeLayer(t.line);t.stops.forEach(s=>{if(s.marker)map.removeLayer(s.marker);});const wasActive=activeTrack&&activeTrack.id===id;tracks=tracks.filter(x=>x.id!==id);if(wasActive){activeTrack=null;setActiveTrack(tracks[0].id);}else{renderTrackList();}toast("Usunięto trasę.");}
+function removeTrack(id){if(tracks.length<=1){toast("To jedyna trasa.");return;}const t=tracks.find(x=>x.id===id);if(!t)return;if(t.line)map.removeLayer(t.line);t.stops.forEach(s=>{if(s.marker)map.removeLayer(s.marker);});const wasActive=activeTrack&&activeTrack.id===id;tracks=tracks.filter(x!==id);if(wasActive){activeTrack=null;setActiveTrack(tracks[0].id);}else{renderTrackList();}toast("Usunięto trasę.");}
 async function placeRouteStop(latlng,address){ensureEndpoints();let s;if(!stops[0].latlng)s=stops[0];else if(!stops[stops.length-1].latlng)s=stops[stops.length-1];else{s={id:idSeq++,latlng:null,address:"",marker:null};stops.push(s);}s.latlng=latlng;if(s.marker)s.marker.setLatLng(latlng);else makeStopMarker(s);s.address=address||await reverseGeocode(latlng);renderStops();rebuildRoute();}
 
 async function fetchRoute(coords){
@@ -663,7 +688,6 @@ $("newBtn").onclick=()=>{if((stops.some(s=>s.latlng)||pois.length)&&!confirm("Wy
 function clearTracksFromMap(){tracks.forEach(t=>{if(t.line){map.removeLayer(t.line);t.line=null;}t.stops.forEach(s=>{if(s.marker){map.removeLayer(s.marker);s.marker=null;}});});}
 function clearAll(){clearTracksFromMap();tracks=[];trackSeq=1;pois.forEach(p=>map.removeLayer(p.marker));pois=[];activeTrack=newTrack();stops=activeTrack.stops;lastGeometry=[];totalMeters=0;renderTrackList();renderStops();rebuildRoute();}
 
-// POPRAWKA: Przycisk bierze teraz współrzędne ze WSZYSTKICH tras, a nie tylko aktywnej
 function fitToRoute(){
   syncActive();
   const all=[];
@@ -773,6 +797,7 @@ function applyObserverLockIfNeeded() {
     document.body.classList.add("observer-mode");
     $("panel").style.display = "none";
     $("searchWrap").style.display = "none";
+    $("userProfileTab").style.display = "none";
     $("observerHud").style.display = "block";
     stops.forEach(s => { if(s.marker) { s.marker.dragging.disable(); if(s.address) s.marker.bindPopup(`<b>${s.address}</b>`); } });
     pois.forEach(p => { if(p.marker) { p.marker.dragging.disable(); const def=POI[p.type].label; p.marker.bindPopup(`<b>${p.name || def}</b>`); } });
@@ -892,7 +917,7 @@ function pngLngLatToPixel(lng, lat, zoom){
   const n=Math.pow(2,zoom), size=512;
   const x=((lng+180)/360)*n*size;
   const latRad=lat*Math.PI/180;
-  const y=(1-Math.log(Math.tan(latRad)+1/Math.cos(latRad))/Math.PI)/2*n*size;
+  const y=(1-Math.log(Math.tan(latRad)+1/Math.cos(latRad))/PI)/2*n*size;
   return {x,y};
 }
 async function renderStaticMap(canvasW,canvasH){
@@ -995,7 +1020,7 @@ $("plansBtn").onclick=()=>{$("plansOverlay").classList.add("show");renderPlans()
 $("plansCloseBtn").onclick=()=>{$("plansOverlay").classList.remove("show");};
 function renderPlans(){
   const grid=$("plansGrid"); if(!grid)return; grid.innerHTML="";
-  Object.entries(PLAN_META).forEach(([key,m])=>{
+  Object.entries(PLAN_META).forEach(([key,m]) => {
     const card=document.createElement("div");card.className="planCard";
     card.innerHTML=`<div class="pname" style="color:${m.color}">${m.label}</div><div class="pprice">${m.price}</div>`;
     grid.appendChild(card);
@@ -1003,6 +1028,96 @@ function renderPlans(){
 }
 applyPlanUI();
 
+// ---------- PANEL KLIENTA / CHMURA PROFILU ----------
+if(!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+const fauth = firebase.auth();
+if(!fdb) fdb = firebase.database();
+
+$("openAuthBtn").onclick = () => {
+  $("authOverlay").style.display = "flex";
+  if (fauth.currentUser) { showClientPanel(); } 
+  else { $("authScreen").style.display = "block"; $("clientPanelScreen").style.display = "none"; }
+};
+$("closeAuthBtn").onclick = () => $("authOverlay").style.display = "none";
+
+$("registerBtn").onclick = () => {
+  const email = $("authEmail").value.trim(); const pass = $("authPassword").value;
+  fauth.createUserWithEmailAndPassword(email, pass)
+    .then(() => { toast("Konto utworzone!"); })
+    .catch(err => { alert("Błąd: " + err.message); });
+};
+
+$("loginBtn").onclick = () => {
+  const email = $("authEmail").value.trim(); const pass = $("authPassword").value;
+  fauth.signInWithEmailAndPassword(email, pass)
+    .then(() => { toast("Zalogowano!"); })
+    .catch(err => { alert("Błąd: " + err.message); });
+};
+
+$("logoutBtn").onclick = () => {
+  fauth.signOut().then(() => {
+    $("authScreen").style.display = "block"; $("clientPanelScreen").style.display = "none";
+    toast("Wylogowano.");
+  });
+};
+
+fauth.onAuthStateChanged(user => {
+  if (user) {
+    $("openAuthBtn").textContent = "⚙️ Mój Profil";
+    if ($("authOverlay").style.display === "flex") showClientPanel();
+  } else {
+    $("openAuthBtn").textContent = "👤 Moje Konto";
+  }
+});
+
+function showClientPanel() {
+  $("authScreen").style.display = "none"; $("clientPanelScreen").style.display = "block";
+  $("userHello").textContent = `Zalogowany jako: ${fauth.currentUser.email}`;
+  fetchUserTracks();
+}
+
+$("saveToCloudBtn").onclick = () => {
+  const user = fauth.currentUser; if (!user) return;
+  const projectData = serialize(); const trackId = "track_" + Date.now();
+  fdb.ref(`users/${user.uid}/projects/${trackId}`).set({
+    id: trackId, timestamp: Date.now(), data: projectData
+  }).then(() => { toast("Zapisano w chmurze!"); fetchUserTracks(); });
+};
+
+function fetchUserTracks() {
+  const user = fauth.currentUser; const listCont = $("userTracksList"); if (!user || !listCont) return;
+  fdb.ref(`users/${user.uid}/projects`).once("value", snap => {
+    const data = snap.val(); listCont.innerHTML = "";
+    if (!data) { listCont.innerHTML = '<div class="empty">Brak zapisanych tras.</div>'; return; }
+    Object.values(data).forEach(proj => {
+      const row = document.createElement("div");
+      row.style.cssText = "background:var(--panel-3); padding:10px; border-radius:8px; display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;";
+      row.innerHTML = `
+        <span style="font-weight:600; font-size:12px; max-width:240px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">📌 ${proj.data.name || "Bez nazwy"}</span>
+        <div style="display:flex; gap:6px;">
+          <button class="btn" style="padding:4px 8px; font-size:11px;" onclick="loadCloudProject('${proj.id}')">Wczytaj</button>
+          <button class="btn" style="padding:4px 8px; font-size:11px; border-color:var(--bad); color:var(--bad);" onclick="deleteCloudProject('${proj.id}')">✕</button>
+        </div>`;
+      listCont.appendChild(row);
+    });
+  });
+}
+
+window.loadCloudProject = (id) => {
+  const user = fauth.currentUser;
+  fdb.ref(`users/${user.uid}/projects/${id}/data`).once("value", snap => {
+    const projectData = snap.val();
+    if(projectData) { loadProject(projectData); $("authOverlay").style.display = "none"; toast("Wczytano trasę!"); }
+  });
+};
+
+window.deleteCloudProject = (id) => {
+  if (!confirm("Usunąć tę trasę z chmury?")) return;
+  const user = fauth.currentUser;
+  fdb.ref(`users/${user.uid}/projects/${id}`).remove().then(() => { fetchUserTracks(); });
+};
+
+// ---------- INICJALIZACJA SYSTEMU ----------
 if(!tracks.length){activeTrack=newTrack("Trasa 1",TRACK_COLORS[0]);stops=activeTrack.stops;}
 (buildChips=function(){const wrap=$("poiChips");if(!wrap)return;wrap.innerHTML="";Object.keys(POI).forEach(type=>{const b=document.createElement("button");b.className="chip"+(type===poiType?" on":"");b.dataset.type=type;b.innerHTML=`<span class="ic">${POI[type].ic}</span>${POI[type].label}`;wrap.appendChild(b);});})();
 
