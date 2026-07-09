@@ -51,7 +51,6 @@
   ::-webkit-scrollbar-thumb{background:var(--line);border-radius:99px;border:2px solid var(--panel-solid)}
   ::-webkit-scrollbar-track{background:transparent}
 
-  /* MAP fills the whole screen — never collapses */
   #map{position:fixed;top:0;left:0;right:0;bottom:0;z-index:0}
   .leaflet-container{background:#0e1620;font-family:inherit}
   .leaflet-control-zoom a,.leaflet-control-layers-toggle{background:var(--panel-solid)!important;color:var(--ink)!important;border:1px solid var(--line)!important}
@@ -62,7 +61,6 @@
   .leaflet-popup-tip{background:var(--panel-solid);border:1px solid var(--line)}
   .leaflet-popup-close-button{color:var(--ink-dim)!important;font-size:18px!important;padding:6px 8px 0 0!important}
 
-  /* PANEL is a glass overlay on top of the map */
   #panel{position:fixed;top:0;left:0;bottom:0;width:372px;z-index:1000;background:var(--panel);
     backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
     border-right:1px solid var(--line-soft);display:flex;flex-direction:column;box-shadow:var(--shadow)}
@@ -115,11 +113,11 @@
   .chip{display:flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--panel-2);color:var(--ink);border-radius:var(--r-sm);padding:10px;font-size:12.5px;cursor:pointer;text-align:left;transition:.15s;font-weight:500}
   .chip .ic{font-size:15px}
   .chip.on{border-color:var(--accent);background:var(--accent-soft);color:var(--accent-2)}
-  /* plan / account */
+
   .planrow{display:flex;align-items:center;justify-content:space-between;background:var(--panel-2);border:1px solid var(--line);border-radius:var(--r);padding:11px 13px;margin-bottom:8px}
   .planrow span:first-child{font-size:13px;font-weight:600}
   .planbadge{font-size:11px;font-weight:700;color:#fff;padding:4px 11px;border-radius:99px;letter-spacing:.4px;text-transform:uppercase}
-  /* stops */
+
   .stop{position:relative;margin-bottom:9px}
   .poiGroupHead{display:flex;align-items:center;gap:7px;margin:13px 0 6px;padding-bottom:5px;border-bottom:1px solid var(--line-soft);font-weight:600;font-size:13px;color:#cdd6df}
   .poiGroupHead .ic{font-size:15px}
@@ -171,7 +169,7 @@
   .poiItem .edit .fld{font-size:13px;padding:8px 9px}
   .poiItem textarea{min-height:46px;resize:vertical}
   .empty{font-size:12px;color:var(--ink-dim);font-style:italic}
-  /* top search HUD */
+
   #searchWrap{position:fixed;top:calc(14px + var(--sat));left:404px;width:344px;z-index:1100}
   #searchBox{display:flex;align-items:center;gap:8px;background:var(--panel);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:1px solid var(--line-soft);border-radius:var(--r);padding:0 13px;box-shadow:var(--shadow)}
   #searchBox input{flex:1;background:transparent;border:0;color:var(--ink);padding:13px 0;outline:none;font-family:var(--font)}
@@ -196,7 +194,7 @@
   .online-chip .dotc{width:9px;height:9px;border-radius:50%;flex:none}
   #toast{position:fixed;bottom:calc(20px + var(--sab));left:50%;transform:translateX(-50%) translateY(20px);background:var(--panel-solid);border:1px solid var(--line);color:var(--ink);padding:12px 18px;border-radius:var(--r);font-size:13px;opacity:0;pointer-events:none;transition:.2s;z-index:6000;box-shadow:var(--shadow);max-width:84vw;text-align:center}
   #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
-  /* plans modal */
+
   #plansOverlay{display:none;position:fixed;inset:0;z-index:5500;background:rgba(5,8,12,.72);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:18px}
   #plansOverlay.show{display:flex}
   .plansBox{background:var(--panel-solid);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);width:100%;max-width:720px;max-height:88vh;overflow-y:auto;padding:22px}
@@ -216,12 +214,14 @@
   .planCard .tag{position:absolute;top:-9px;right:12px;background:linear-gradient(135deg,var(--accent-2),var(--accent));color:#fff;font-size:9.5px;font-weight:700;letter-spacing:.6px;padding:3px 10px;border-radius:99px;text-transform:uppercase}
   .plansClose{position:sticky;bottom:0;margin-top:14px}
   
-  /* Observer Info HUD button */
   #observerHud{display:none;position:fixed;top:calc(14px + var(--sat));left:14px;background:var(--panel);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:1px solid var(--line-soft);border-radius:var(--r);padding:12px 16px;box-shadow:var(--shadow);z-index:1100;max-width:320px}
   #observerHud h2{font-size:14px;font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:6px}
   #observerHud p{font-size:12px;color:var(--ink-dim)}
 
-  /* MOBILE: panel becomes a bottom sheet */
+  #threeOverlay{display:none;position:fixed;inset:0;z-index:5000;background:#000}
+  #threeMap{position:absolute;inset:0}
+  #threeClose{position:absolute;top:calc(14px + env(safe-area-inset-top,0px));left:14px;z-index:5001;background:#141a22;color:#fff;border:1px solid #2a3542;border-radius:12px;padding:11px 15px;font-weight:700;cursor:pointer;font-family:inherit}
+
   @media (max-width:820px){
     #panel{top:auto;left:0;right:0;bottom:0;width:auto;max-height:62vh;border-right:0;border-top:1px solid var(--line-soft);border-radius:22px 22px 0 0;box-shadow:0 -8px 30px rgba(0,0,0,.55)}
     #panel .grab{display:block;width:44px;height:5px;border-radius:99px;background:var(--line);margin:9px auto 0}
@@ -245,10 +245,12 @@
 <body>
   <div id="map"></div>
 
+  <!-- PRZYCISK PROFILU -->
   <div id="userProfileTab" style="position:fixed; top:calc(14px + var(--sat)); right:110px; z-index:1100;">
     <button class="btn primary" id="openAuthBtn" style="padding:10px 16px; border-radius:99px; font-weight:700;">👤 Moje Konto</button>
   </div>
 
+  <!-- MODAL PANELU KLIENTA / LOGOWANIA -->
   <div id="authOverlay" style="display:none; position:fixed; inset:0; z-index:5500; background:rgba(5,8,12,.85); backdrop-filter:blur(8px); align-items:center; justify-content:center; padding:18px;">
     <div class="plansBox" style="max-width:500px; width:100%;">
       <div id="authScreen">
@@ -307,6 +309,7 @@
       <div class="s"><div class="v" id="poiCount">0</div><div class="k">wszystkie pkt.</div></div>
     </div>
     <div class="scroll">
+      <!-- KONTO I PLAN -->
       <div class="group">
         <div class="lbl">Konto i plan</div>
         <div class="g-content">
@@ -316,6 +319,7 @@
         </div>
       </div>
 
+      <!-- PROJEKT -->
       <div class="group">
         <div class="lbl">Projekt</div>
         <div class="g-content">
@@ -325,6 +329,7 @@
         </div>
       </div>
 
+      <!-- UDOSTĘPNIANIE -->
       <div class="group collapsed">
         <div class="lbl">Udostępnianie linkiem</div>
         <div class="g-content">
@@ -338,6 +343,7 @@
         </div>
       </div>
 
+      <!-- WSPÓŁPRACA NA ŻYWO -->
       <div class="group collapsed">
         <div class="lbl">Współpraca na żywo</div>
         <div class="g-content">
@@ -353,6 +359,7 @@
         </div>
       </div>
 
+      <!-- TRASY / WARIANTY -->
       <div class="group">
         <div class="lbl">Trasy (warianty / kolory)</div>
         <div class="g-content">
@@ -362,6 +369,7 @@
         </div>
       </div>
 
+      <!-- ADRESY I PRZYSTANKI -->
       <div class="group">
         <div class="lbl">Trasa — punkty i adresy</div>
         <div class="g-content">
@@ -371,6 +379,7 @@
         </div>
       </div>
 
+      <!-- DYSTANS DOCELOWY -->
       <div class="group">
         <div class="lbl">Dystans docelowy</div>
         <div class="g-content">
@@ -390,6 +399,7 @@
         </div>
       </div>
 
+      <!-- TEMPO I CZAS -->
       <div class="group collapsed">
         <div class="lbl">Szacowany czas i tempo</div>
         <div class="g-content">
@@ -407,6 +417,7 @@
         </div>
       </div>
 
+      <!-- AUTOMATYKA PUNKTÓW -->
       <div class="group collapsed">
         <div class="lbl">Automatyczne rozmieszczanie</div>
         <div class="g-content">
@@ -415,6 +426,7 @@
         </div>
       </div>
 
+      <!-- STAWIANIE POI -->
       <div class="group">
         <div class="lbl">Ikony i typy punktów</div>
         <div class="g-content">
@@ -422,6 +434,7 @@
         </div>
       </div>
 
+      <!-- LISTA POI -->
       <div class="group">
         <div class="lbl">Punkty na trasie <span class="count" id="listCount">0</span></div>
         <div class="g-content">
@@ -430,6 +443,7 @@
         </div>
       </div>
 
+      <!-- PROFIL I WYSOKOŚĆ -->
       <div class="group collapsed">
         <div class="lbl">Profil wysokościowy</div>
         <div class="g-content">
@@ -441,6 +455,7 @@
         </div>
       </div>
 
+      <!-- 3D I EKSPORT -->
       <div class="group collapsed">
         <div class="lbl">Wizualizacja 3D i Eksport</div>
         <div class="g-content">
@@ -530,6 +545,12 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "135831786286",
   appId: "1:135831786286:web:436ada01c7b7dcb0b9e0bf"
 };
+
+// Zainicjowanie Firebase i jego modułów przed wywołaniem innych funkcji
+if(!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+const fauth = firebase.auth();
+let fdb = firebase.database();
+
 const LIVE_PALETTE=["#ff6b1a","#3da5f4","#33c27a","#9b5de5","#f4b43d","#e23b4e","#16c8c8","#ff7ab6"];
 const toast=m=>{if(isObserverMode)return;const t=$("toast");t.textContent=m;t.classList.add("show");clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove("show"),2800);};
 
@@ -542,7 +563,7 @@ function pointAtMeters(target){let acc=0;for(let i=1;i<lastGeometry.length;i++){
 async function geocode(q){const b=map.getBounds();const vb=`${b.getWest()},${b.getNorth()},${b.getEast()},${b.getSouth()}`;const r=await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&accept-language=pl&viewbox=${vb}&q=${encodeURIComponent(q)}`);const j=await r.json();return j.map(it=>{const p=it.display_name.split(", ");return{main:p.shift(),rest:p.join(", "),lat:parseFloat(it.lat),lon:parseFloat(it.lon)};});}
 async function reverseGeocode(ll){try{const r=await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&accept-language=pl&lat=${ll.lat}&lon=${ll.lng}`);const j=await r.json();return j.display_name?j.display_name.split(", ").slice(0,2).join(", "):"";}catch(e){return"";}}
 let acInput=null,acPick=null,acResults=[];
-function acHide(){const f=$("acFloat");if(f)f.classList.remove("show");acInput=null;}
+function acHide(){const f=$("acFloat");if(f) f.classList.remove("show");acInput=null;}
 function acPosition(){const f=$("acFloat");if(!acInput||!f)return;const r=acInput.getBoundingClientRect();f.style.left=r.left+"px";f.style.top=(r.bottom+4)+"px";f.style.width=Math.max(r.width,220)+"px";}
 function acRender(){const f=$("acFloat");f.innerHTML="";if(!acResults.length){f.innerHTML='<div class="res">Nic nie znaleziono.</div>';}else acResults.forEach(it=>{const el=document.createElement("div");el.className="res";el.innerHTML=`<span class="pin">📍</span><span class="t">${it.main.replace(/</g,"&lt;")}<small>${it.rest.replace(/</g,"&lt;")}</small></span>`;el.onmousedown=ev=>{ev.preventDefault();const pick=acPick,item=it;acHide();pick(item);};acFloat.appendChild(el);});acPosition();f.classList.add("show");}
 function attachAutocomplete(input,onPick){
@@ -573,7 +594,9 @@ function renderStops(){const wrap=$("stopsList");if(!wrap)return;wrap.innerHTML=
 function moveStop(i,dir){const j=i+dir;if(j<0||j>=stops.length)return;const t=stops[i];stops[i]=stops[j];stops[j]=t;renderStops();rebuildRoute();}
 function renderTrackList(){const wrap=$("trackList");if(!wrap)return;wrap.innerHTML="";tracks.forEach(t=>{const isAct=activeTrack&&t.id===activeTrack.id;const row=document.createElement("div");row.className="trackrow"+(isAct?" act":"");const km=(t.meters/1000).toFixed(2).replace(".",",");row.innerHTML=`<span class="dotc" style="background:${t.color};cursor:pointer;width:12px;height:12px;border-radius:50%;flex:none;margin-left:4px"></span><input class="tname fld" value="${(t.name||"").replace(/"/g,"&quot;")}" style="flex:1;min-width:0"><span class="tkm" style="font-size:12px;color:#8fa0b0;white-space:nowrap">${km} km</span>`;const nameInp=row.querySelector(".tname");nameInp.onchange=()=>{t.name=nameInp.value;updateTargetSummary();};nameInp.onclick=e=>e.stopPropagation();const actBtn=document.createElement("button");actBtn.className="mv";actBtn.textContent=isAct?"✏️":"✎";actBtn.title="Edytuj";actBtn.onclick=e=>{e.stopPropagation();setActiveTrack(t.id);};row.appendChild(actBtn);if(tracks.length>1){const delBtn=document.createElement("button");delBtn.className="rm";delBtn.textContent="✕";delBtn.onclick=e=>{e.stopPropagation();removeTrack(t.id);};row.appendChild(delBtn);}row.querySelector(".dotc").onclick=()=>setActiveTrack(t.id);wrap.appendChild(row);});}
 function addTrackUI(){const t=newTrack();setActiveTrack(t.id);toast("Dodano nową trasę.");}
-function removeTrack(id){if(tracks.length<=1){toast("To jedyna trasa.");return;}const t=tracks.find(x=>x.id===id);if(!t)return;if(t.line)map.removeLayer(t.line);t.stops.forEach(s=>{if(s.marker)map.removeLayer(s.marker);});const wasActive=activeTrack&&activeTrack.id===id;tracks=tracks.filter(x!==id);if(wasActive){activeTrack=null;setActiveTrack(tracks[0].id);}else{renderTrackList();}toast("Usunięto trasę.");}
+function removeTrack(id){if(tracks.length<=1){toast("To jedyna trasa.");return;}const t=tracks.find(x=>x.id===id);if(!t)return;if(t.line)map.removeLayer(t.line);t.stops.forEach(s=>{if(s.marker)map.removeLayer(s.marker);});const wasActive=activeTrack&&activeTrack.id===id;
+  tracks=tracks.filter(x=>x.id!==id); // Poprawiona literówka (było x!==id)
+  if(wasActive){activeTrack=null;setActiveTrack(tracks[0].id);}else{renderTrackList();}toast("Usunięto trasę.");}
 async function placeRouteStop(latlng,address){ensureEndpoints();let s;if(!stops[0].latlng)s=stops[0];else if(!stops[stops.length-1].latlng)s=stops[stops.length-1];else{s={id:idSeq++,latlng:null,address:"",marker:null};stops.push(s);}s.latlng=latlng;if(s.marker)s.marker.setLatLng(latlng);else makeStopMarker(s);s.address=address||await reverseGeocode(latlng);renderStops();rebuildRoute();}
 
 async function fetchRoute(coords){
@@ -917,7 +940,7 @@ function pngLngLatToPixel(lng, lat, zoom){
   const n=Math.pow(2,zoom), size=512;
   const x=((lng+180)/360)*n*size;
   const latRad=lat*Math.PI/180;
-  const y=(1-Math.log(Math.tan(latRad)+1/Math.cos(latRad))/PI)/2*n*size;
+  const y=(1-Math.log(Math.tan(latRad)+1/Math.cos(latRad))/Math.PI)/2*n*size;
   return {x,y};
 }
 async function renderStaticMap(canvasW,canvasH){
@@ -983,16 +1006,14 @@ $("paceSet").onclick=()=>{const v=$("paceCustom").value.trim();let s=null;if(v.i
 // ---------- live collaboration (Firebase) ----------
 function deviceId(){try{let id=localStorage.getItem("planer_device");if(!id){id=Math.random().toString(36).slice(2,9);localStorage.setItem("planer_device",id);}return id;}catch(e){return "device";}}
 function deviceColor(){return LIVE_PALETTE[Math.floor(Math.random()*LIVE_PALETTE.length)];}
-let live=false,fdb=null,roomRef=null,presRef=null,myPresRef=null,clientId=deviceId(),myColor=null,lastSentSig="",applyingRemote=false,cursorLayer=null,presenceData={};
+let live=false,roomRef=null,presRef=null,myPresRef=null,clientId=deviceId(),myColor=null,lastSentSig="",applyingRemote=false,cursorLayer=null,presenceData={};
 function projectSig(d){return JSON.stringify(d);}
 function getRoom(){const m=(location.hash||"").match(/room=([a-z0-9]+)/i);return m?m[1]:null;}
 async function startLive(){
   if(live || isObserverMode)return;
   let myName=($("liveName").value||"").trim(); if(!myName) myName=prompt("Podaj imię:")||"Gość";
   let room=getRoom(); if(!room){room=Math.random().toString(36).slice(2,10);location.hash="room="+room;}
-  if(typeof firebase==="undefined") return;
-  if(!firebase.apps.length)firebase.initializeApp(FIREBASE_CONFIG);
-  fdb=firebase.database(); myColor=deviceColor();
+  myColor=deviceColor();
   roomRef=fdb.ref("rooms/"+room+"/project");
   presRef=fdb.ref("rooms/"+room+"/presence");
   myPresRef=presRef.child(clientId);
@@ -1029,10 +1050,6 @@ function renderPlans(){
 applyPlanUI();
 
 // ---------- PANEL KLIENTA / CHMURA PROFILU ----------
-if(!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
-const fauth = firebase.auth();
-if(!fdb) fdb = firebase.database();
-
 $("openAuthBtn").onclick = () => {
   $("authOverlay").style.display = "flex";
   if (fauth.currentUser) { showClientPanel(); } 
