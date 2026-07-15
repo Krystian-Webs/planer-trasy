@@ -1,0 +1,53 @@
+import 'dart:ui';
+
+import 'package:flutter/material.dart';
+
+import '../../theme/app_theme.dart';
+import 'panel_content.dart';
+
+/// The persistent bottom panel over the map.
+///
+/// Uses Flutter's own [DraggableScrollableSheet] instead of the package's
+/// `GlassModalSheet` — that widget's custom pointer-tracking (needed for its
+/// jelly drag physics) gets permanently wedged after a touch near its top
+/// edge misses a matching pointer-up (a documented class of bug in
+/// `liquid_glass_widgets` for iOS gesture-arena drops), which silently
+/// swallows every touch on the whole screen afterwards, including taps on
+/// the map far outside the sheet. `DraggableScrollableSheet` is a core
+/// Flutter widget with no custom gesture state machine, so it can't wedge,
+/// and it still gives the "peek / half / full" snap behavior via `snapSizes`.
+class GlassBottomSheet extends StatelessWidget {
+  const GlassBottomSheet({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.48,
+      minChildSize: 0.15,
+      maxChildSize: 0.94,
+      snap: true,
+      snapSizes: const [0.15, 0.48, 0.94],
+      builder: (context, scrollController) {
+        return ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+            child: Container(
+              decoration: BoxDecoration(
+                color: AppColors.panel,
+                border: const Border(top: BorderSide(color: AppColors.line)),
+                boxShadow: [
+                  BoxShadow(color: Colors.black.withValues(alpha: 0.35), blurRadius: 24, offset: const Offset(0, -4)),
+                ],
+              ),
+              // The drag handle lives inside PanelContent's own scroll view
+              // (as its first sliver) rather than here, so dragging it
+              // actually resizes the sheet — see PanelContent's doc comment.
+              child: PanelContent(scrollController: scrollController),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
