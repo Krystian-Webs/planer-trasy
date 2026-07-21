@@ -25,6 +25,7 @@ class PlannerController extends ChangeNotifier {
     // the isolate solid on the very first point placed on a fresh project.
     activeTrack = _newTrack();
     _loadAutosave();
+    _loadDefaultPace();
   }
 
   // ---- identity ----
@@ -38,6 +39,7 @@ class PlannerController extends ChangeNotifier {
   RouteTrack? activeTrack;
   bool snap = true;
   bool showKm = false;
+  bool showGradeColor = false;
   PlannerMode mode = PlannerMode.route;
   String poiType = 'checkpoint';
   List<Poi> pois = [];
@@ -205,6 +207,12 @@ class PlannerController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setTrackColor(int id, int colorValue) {
+    tracks.firstWhere((t) => t.id == id).colorValue = colorValue;
+    notifyListeners();
+    _scheduleAutosave();
+  }
+
   /// Imports a parsed GPX file: each `<trk>`/`<rte>` becomes a new route
   /// track using the raw recorded path as-is (not re-routed through OSRM,
   /// so the shape stays exactly what was recorded), and each `<wpt>`
@@ -217,6 +225,7 @@ class PlannerController extends ChangeNotifier {
       return;
     }
     _pushUndo();
+    _resetElevation();
     if (tracks.length == 1 && !tracks.first.stops.any((s) => s.latLng != null)) {
       tracks.clear();
     }
@@ -471,6 +480,11 @@ class PlannerController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void toggleGradeColor(bool v) {
+    showGradeColor = v;
+    notifyListeners();
+  }
+
   void setMode(PlannerMode m) {
     mode = m;
     notifyListeners();
@@ -589,10 +603,88 @@ class PlannerController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Persists [s] as the pace new projects start with (set from the
+  /// Settings screen) and applies it immediately to the current session.
+  Future<void> setDefaultPaceSec(int s) async {
+    paceSec = s;
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt('planer_default_pace_sec', s);
+    } catch (_) {}
+  }
+
+  Future<void> _loadDefaultPace() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final s = prefs.getInt('planer_default_pace_sec');
+      if (s != null && s > 0) {
+        paceSec = s;
+        notifyListeners();
+      }
+    } catch (_) {}
+  }
+
+  Future<void> clearAutosave() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('planer_autosave');
+      _lastAutosaveJson = '';
+      toast('Wyczyszczono automatyczny zapis.');
+    } catch (_) {}
+  }
+
   Duration? get estimatedDuration {
     final km = totalMeters / 1000;
     if (km <= 0) return null;
     return Duration(seconds: (km * paceSec).round());
+  }
+
+  /// Per-km splits at the current pace, adjusted for climbing effort when an
+  /// elevation profile is available: roughly +1s per metre of ascent within
+  /// that kilometre (a common rough rule of thumb in trail-running pacing
+  /// charts) — so a hilly km reads slower than a flat one instead of every
+  /// row showing an identical, not-very-useful split.
+  List<SplitRow> computeSplits() {
+    if (lastGeometry.length < 2 || totalMeters <= 0) return [];
+    final profile = elevationProfile;
+    final rows = <SplitRow>[];
+    final fullKm = (totalMeters / 1000).floor();
+    final hasPartial = totalMeters - fullKm * 1000 > 10;
+    final lastKm = fullKm + (hasPartial ? 1 : 0);
+    double cumTime = 0;
+    for (var km = 1; km <= lastKm; km++) {
+      final segStart = (km - 1) * 1000.0;
+      final segEnd = math.min(km * 1000.0, totalMeters);
+      final segDist = segEnd - segStart;
+      double? ascent, descent;
+      if (profile != null) {
+        ascent = 0;
+        descent = 0;
+        for (var i = 1; i < profile.length; i++) {
+          final d0 = profile[i - 1].key, d1 = profile[i].key;
+          if (d1 <= segStart || d0 >= segEnd) continue;
+          final delta = profile[i].value - profile[i - 1].value;
+          if (delta > 0) {
+            ascent = ascent! + delta;
+          } else {
+            descent = descent! - delta;
+          }
+        }
+      }
+      final splitSec = paceSec * (segDist / 1000) + (ascent ?? 0);
+      cumTime += splitSec;
+      rows.add(SplitRow(
+        km: km,
+        distanceMeters: segDist,
+        cumulativeMeters: segEnd,
+        splitSeconds: splitSec,
+        cumulativeSeconds: cumTime,
+        ascent: ascent,
+        descent: descent,
+      ));
+    }
+    return rows;
   }
 
   // -------------------------------------------------------- elevation ----
@@ -653,6 +745,7 @@ class PlannerController extends ChangeNotifier {
 
   Future<void> loadProject(Map<String, dynamic> d, {bool keepView = false}) async {
     _clearHistory();
+    _resetElevation();
     tracks = [];
     pois = [];
     _trackSeq = 1;
@@ -728,8 +821,19 @@ class PlannerController extends ChangeNotifier {
     activeTrack = _newTrack();
     targetKm = null;
     targetMarker = null;
+    _resetElevation();
     notifyListeners();
     _scheduleAutosave();
+  }
+
+  /// Clears any elevation profile / grade-coloring computed for a route
+  /// that's about to stop existing (new project, or a different project
+  /// loaded) — otherwise the chart, splits and grade-colored line keep
+  /// showing stale data for a route that's no longer there.
+  void _resetElevation() {
+    elevationProfile = null;
+    elevAsc = elevDesc = elevMin = elevMax = 0;
+    showGradeColor = false;
   }
 
   bool get hasContent => stops.any((s) => s.latLng != null) || pois.isNotEmpty;
@@ -773,6 +877,26 @@ class PlannerController extends ChangeNotifier {
 }
 
 String fmtKm(double n) => (n).toStringAsFixed(2).replaceAll('.', ',');
+
+/// One row of the per-km splits table — see [PlannerController.computeSplits].
+class SplitRow {
+  final int km;
+  final double distanceMeters;
+  final double cumulativeMeters;
+  final double splitSeconds;
+  final double cumulativeSeconds;
+  final double? ascent;
+  final double? descent;
+  SplitRow({
+    required this.km,
+    required this.distanceMeters,
+    required this.cumulativeMeters,
+    required this.splitSeconds,
+    required this.cumulativeSeconds,
+    this.ascent,
+    this.descent,
+  });
+}
 
 /// A deep-copied snapshot of the editable project state, used by
 /// [PlannerController]'s undo/redo stack. Kept in memory (not serialized)

@@ -70,6 +70,13 @@ class ElevationSection extends StatelessWidget {
                 StatTile(value: '${c.elevMin.round()}–${c.elevMax.round()}', label: 'M N.P.M.'),
               ],
             ),
+            const SizedBox(height: 8),
+            SwitchRow(
+              title: 'Koloruj trasę wg nachylenia',
+              subtitle: 'Zielony płasko, czerwony strome — jak na mapie',
+              value: c.showGradeColor,
+              onChanged: c.toggleGradeColor,
+            ),
           ],
           const HintText('Pobiera wysokość terenu wzdłuż trasy i pokazuje podbiegi/zbiegi. Przelicz ponownie po zmianie trasy.'),
         ],

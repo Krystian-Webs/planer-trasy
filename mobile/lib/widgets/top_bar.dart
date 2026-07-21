@@ -6,9 +6,13 @@ import 'package:latlong2/latlong.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:provider/provider.dart';
 
+import '../screens/routes_library_screen.dart';
+import '../screens/settings_screen.dart';
 import '../services/geo_service.dart';
+import '../services/location_service.dart';
 import '../state/planner_controller.dart';
 import '../theme/app_theme.dart';
+import 'new_project_flow.dart';
 
 // Forces a dark frosted look regardless of the map tiles behind it — the
 // default content-adaptive glass gets nearly invisible over the light
@@ -33,6 +37,7 @@ class _TopBarState extends State<TopBar> {
   Timer? _debounce;
   List<GeocodeResult> _results = [];
   bool _searching = false;
+  bool _locatingForStart = false;
 
   @override
   void dispose() {
@@ -98,6 +103,23 @@ class _TopBarState extends State<TopBar> {
     widget.mapController.fitCamera(CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(60)));
   }
 
+  Future<void> _useMyLocationAsStart(PlannerController c) async {
+    setState(() => _locatingForStart = true);
+    final pos = await LocationService.currentPosition();
+    if (!mounted) return;
+    setState(() => _locatingForStart = false);
+    if (pos == null) {
+      c.toast('Brak dostępu do lokalizacji — sprawdź ustawienia.');
+      return;
+    }
+    widget.mapController.move(pos, 15);
+    if (c.mode == PlannerMode.route) {
+      await c.placeRouteStop(pos, address: 'Twoja lokalizacja');
+    } else {
+      c.addPoi(c.poiType, pos, name: 'Twoja lokalizacja');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.watch<PlannerController>();
@@ -112,25 +134,32 @@ class _TopBarState extends State<TopBar> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            GlassSegmentedControl(
-              segments: const [
-                GlassSegment(label: '✏️ Rysuj trasę'),
-                GlassSegment(label: '📍 Stawiaj punkty'),
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Planer Trasy',
+                    style: TextStyle(color: AppColors.ink, fontWeight: FontWeight.bold, fontSize: 15, letterSpacing: .2),
+                  ),
+                ),
+                _HeaderIconButton(
+                  icon: Icons.add,
+                  tooltip: 'Nowa trasa',
+                  onTap: () => startNewProject(context, c),
+                ),
+                const SizedBox(width: 8),
+                _HeaderIconButton(
+                  icon: Icons.folder_copy_outlined,
+                  tooltip: 'Moje trasy',
+                  onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const RoutesLibraryScreen())),
+                ),
+                const SizedBox(width: 8),
+                _HeaderIconButton(
+                  icon: Icons.settings_outlined,
+                  tooltip: 'Ustawienia',
+                  onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SettingsScreen())),
+                ),
               ],
-              selectedIndex: c.mode == PlannerMode.route ? 0 : 1,
-              onSegmentSelected: (i) => c.setMode(i == 0 ? PlannerMode.route : PlannerMode.poi),
-              height: 44,
-              // Full pill (radius = height / 2) to match the search field
-              // and the pill buttons below — the 16px library default reads
-              // as a plain rounded rect next to those fully-rounded shapes.
-              borderRadius: 22,
-              settings: _hudGlassSettings,
-              useOwnLayer: true,
-              quality: GlassQuality.standard,
-              backgroundColor: const Color(0xE0141A22),
-              indicatorColor: AppColors.accent,
-              selectedTextStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13),
-              unselectedTextStyle: const TextStyle(color: AppColors.inkDim, fontWeight: FontWeight.w600, fontSize: 13),
             ),
             const SizedBox(height: 8),
             GlassTextField.search(
@@ -180,14 +209,61 @@ class _TopBarState extends State<TopBar> {
                 ),
               ),
             const SizedBox(height: 8),
-            Row(
-              children: [
-                Flexible(child: _Pill(text: distLabel)),
-                const SizedBox(width: 6),
-                _Pill(text: '🔍 Pokaż całą trasę', onTap: () => _fitToRoute(c)),
-              ],
+            // Fades the trailing edge so a scrollable-but-not-fully-visible
+            // third pill (common on smaller phones) reads as "more here",
+            // not as a chip that got cut off.
+            ShaderMask(
+              shaderCallback: (bounds) => const LinearGradient(
+                begin: Alignment.centerRight,
+                end: Alignment(0.85, 0),
+                colors: [Colors.transparent, Colors.black],
+              ).createShader(bounds),
+              blendMode: BlendMode.dstIn,
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.only(right: 16),
+                child: Row(
+                  children: [
+                    _Pill(text: distLabel),
+                    const SizedBox(width: 6),
+                    _Pill(text: '🔍 Pokaż całą trasę', onTap: () => _fitToRoute(c)),
+                    const SizedBox(width: 6),
+                    // Distinct from the map's circular "show my position"
+                    // toggle button (bottom-right) — this one-shot action
+                    // places the route's start here, so it's named to avoid
+                    // being read as the same thing.
+                    _Pill(
+                      text: _locatingForStart ? '⏳ Namierzam…' : '📍 Start tutaj',
+                      onTap: _locatingForStart ? null : () => _useMyLocationAsStart(c),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _HeaderIconButton extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+  const _HeaderIconButton({required this.icon, required this.tooltip, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: AppColors.panelSolid.withValues(alpha: 0.85),
+        shape: const CircleBorder(side: BorderSide(color: AppColors.line)),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onTap,
+          child: SizedBox(width: 34, height: 34, child: Icon(icon, size: 17, color: AppColors.ink)),
         ),
       ),
     );

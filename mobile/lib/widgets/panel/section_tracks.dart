@@ -24,7 +24,7 @@ class TracksSection extends StatelessWidget {
             child: ActionButton(label: '＋ Dodaj kolejną trasę (inny kolor)', onTap: c.addTrack),
           ),
           const HintText(
-              'Każda trasa ma swój kolor i jest widoczna na tej samej mapie. Ikona ołówka wybiera, którą teraz rysujesz. Np. pętla 5 km na pomarańczowo + dodatkowe 4 km na niebiesko = wariant 10 km.'),
+              'Każda trasa ma swój kolor i jest widoczna na tej samej mapie. Ikona ołówka wybiera, którą teraz rysujesz — dotknij kropki aktywnej trasy, by zmienić jej kolor. Np. pętla 5 km na pomarańczowo + dodatkowe 4 km na niebiesko = wariant 10 km.'),
         ],
       ),
     );
@@ -71,12 +71,17 @@ class _TrackRowState extends State<_TrackRow> {
       child: Row(
         children: [
           GestureDetector(
-            onTap: () => c.setActiveTrack(t.id),
+            onTap: () => isActive ? _pickColor(context, c, t.id) : c.setActiveTrack(t.id),
+            onLongPress: () => _pickColor(context, c, t.id),
             child: Container(
               width: 14,
               height: 14,
               margin: const EdgeInsets.only(left: 4, right: 8),
-              decoration: BoxDecoration(color: Color(t.colorValue), shape: BoxShape.circle),
+              decoration: BoxDecoration(
+                color: Color(t.colorValue),
+                shape: BoxShape.circle,
+                border: isActive ? Border.all(color: Colors.white, width: 1.5) : null,
+              ),
             ),
           ),
           Expanded(
@@ -106,5 +111,36 @@ class _TrackRowState extends State<_TrackRow> {
         ],
       ),
     );
+  }
+
+  Future<void> _pickColor(BuildContext context, PlannerController c, int trackId) async {
+    final picked = await showDialog<int>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.panelSolid,
+        title: const Text('Kolor trasy', style: TextStyle(color: AppColors.ink)),
+        content: Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            for (final color in kTrackColors)
+              GestureDetector(
+                onTap: () => Navigator.pop(ctx, color.toARGB32()),
+                child: Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: color,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: color.toARGB32() == widget.track.colorValue ? 2.5 : 0),
+                  ),
+                ),
+              ),
+          ],
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Anuluj'))],
+      ),
+    );
+    if (picked != null) c.setTrackColor(trackId, picked);
   }
 }

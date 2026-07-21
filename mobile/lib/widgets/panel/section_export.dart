@@ -30,7 +30,7 @@ class Terrain3DSection extends StatelessWidget {
             ),
           ),
           const HintText(
-              'Obracana mapa z ukształtowaniem terenu i Twoją trasą. Obracasz i pochylasz dwoma palcami.'),
+              'Obracana mapa z ukształtowaniem terenu i Twoją trasą. Obracasz i pochylasz dwoma palcami, a przyciskiem "Odtwórz przelot" włączysz automatyczny lot wzdłuż trasy.'),
         ],
       ),
     );

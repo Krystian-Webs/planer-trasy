@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../screens/routes_library_screen.dart';
 import '../../services/export_service.dart';
 import '../../state/planner_controller.dart';
+import '../new_project_flow.dart';
 import 'ui_kit.dart';
 
 class ProjectSection extends StatefulWidget {
@@ -45,6 +47,14 @@ class _ProjectSectionState extends State<ProjectSection> {
             onChanged: (v) => c.projectName = v,
           ),
           const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: ActionButton(
+              label: '📚 Moje trasy',
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const RoutesLibraryScreen())),
+            ),
+          ),
+          const SizedBox(height: 8),
           Row(
             children: [
               Expanded(
@@ -71,30 +81,9 @@ class _ProjectSectionState extends State<ProjectSection> {
               ActionButton(
                 label: '＋',
                 width: 46,
-                onTap: () {
-                  if (c.hasContent) {
-                    showDialog(
-                      context: context,
-                      builder: (ctx) => AlertDialog(
-                        title: const Text('Nowy projekt'),
-                        content: const Text('Wyczyścić bieżący projekt?'),
-                        actions: [
-                          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Anuluj')),
-                          TextButton(
-                            onPressed: () {
-                              Navigator.pop(ctx);
-                              c.newProject();
-                              _nameCtrl.text = c.projectName;
-                            },
-                            child: const Text('Wyczyść'),
-                          ),
-                        ],
-                      ),
-                    );
-                  } else {
-                    c.newProject();
-                    _nameCtrl.text = c.projectName;
-                  }
+                onTap: () async {
+                  await startNewProject(context, c);
+                  _nameCtrl.text = c.projectName;
                 },
               ),
             ],

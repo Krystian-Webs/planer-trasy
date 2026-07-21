@@ -25,6 +25,15 @@ class AppColors {
     end: Alignment.bottomRight,
     colors: [accent2, accent],
   );
+
+  /// Strava/Komoot-style grade coloring for a route segment, by |slope|%.
+  static Color gradeColor(double gradePercent) {
+    final g = gradePercent.abs();
+    if (g < 2) return good;
+    if (g < 5) return const Color(0xFFF4B43D);
+    if (g < 9) return accent;
+    return bad;
+  }
 }
 
 /// POI type metadata, ported from the `POI` map in the web app.

@@ -18,7 +18,12 @@ enum BaseLayer { voyager, osm, satellite }
 
 class MapView extends StatefulWidget {
   final MapController mapController;
-  const MapView({super.key, required this.mapController});
+  // Lets the host screen react when the user switches draw/place mode from
+  // the floating pill (e.g. to reveal the matching sheet tab) — see
+  // PlannerScreen for why entering "place points" mode specifically needs
+  // this and entering "draw route" mode doesn't.
+  final ValueChanged<PlannerMode>? onModeChanged;
+  const MapView({super.key, required this.mapController, this.onModeChanged});
 
   @override
   State<MapView> createState() => MapViewState();
@@ -38,6 +43,7 @@ class MapViewState extends State<MapView> {
   LatLng? _myLocation;
   StreamSubscription<LatLng>? _locSub;
   bool _locating = false;
+  bool _hintDismissed = false;
 
   bool get _isDragging => _draggingStopId != null || _draggingPoiId != null;
 
@@ -215,6 +221,45 @@ class MapViewState extends State<MapView> {
     widget.mapController.move(camera.center, newZoom);
   }
 
+  /// One [Polyline] per track normally; when grade coloring is on, the
+  /// active track is instead split into a short segment per elevation
+  /// sample, each tinted by that segment's climb/descent steepness.
+  List<Polyline> _buildPolylines(PlannerController c) {
+    final profile = c.elevationProfile;
+    final activeGeom = c.activeTrack?.geometry;
+    final gradeSegments = c.showGradeColor && profile != null && profile.length >= 2 && activeGeom != null && activeGeom.length >= 2
+        ? _gradeColoredSegments(activeGeom, profile)
+        : null;
+    return [
+      for (final t in c.tracks)
+        if (t.geometry.length >= 2)
+          if (gradeSegments != null && t == c.activeTrack)
+            ...gradeSegments
+          else
+            Polyline(
+              points: t.geometry,
+              color: Color(t.colorValue).withValues(alpha: t == c.activeTrack ? 0.95 : 0.55),
+              strokeWidth: t == c.activeTrack ? 6 : 4,
+            ),
+    ];
+  }
+
+  List<Polyline> _gradeColoredSegments(List<LatLng> geometry, List<MapEntry<double, double>> profile) {
+    final segs = <Polyline>[];
+    for (var i = 1; i < profile.length; i++) {
+      final d0 = profile[i - 1].key, d1 = profile[i].key;
+      final dist = d1 - d0;
+      if (dist <= 0) continue;
+      final grade = (profile[i].value - profile[i - 1].value) / dist * 100;
+      segs.add(Polyline(
+        points: [pointAtMeters(geometry, d0), pointAtMeters(geometry, d1)],
+        color: AppColors.gradeColor(grade),
+        strokeWidth: 6,
+      ));
+    }
+    return segs;
+  }
+
   String _tileUrl(BaseLayer b) {
     switch (b) {
       case BaseLayer.voyager:
@@ -333,17 +378,7 @@ class MapViewState extends State<MapView> {
               subdomains: _base == BaseLayer.voyager ? const ['a', 'b', 'c', 'd'] : const [],
               userAgentPackageName: 'com.planertrasy.mobile',
             ),
-            PolylineLayer(
-              polylines: [
-                for (final t in c.tracks)
-                  if (t.geometry.length >= 2)
-                    Polyline(
-                      points: t.geometry,
-                      color: Color(t.colorValue).withValues(alpha: t == c.activeTrack ? 0.95 : 0.55),
-                      strokeWidth: t == c.activeTrack ? 6 : 4,
-                    ),
-              ],
-            ),
+            PolylineLayer(polylines: _buildPolylines(c)),
             MarkerLayer(markers: kmMarkers),
             MarkerLayer(markers: targetMarkers),
             MarkerLayer(markers: stopMarkers),
@@ -354,14 +389,29 @@ class MapViewState extends State<MapView> {
               ]),
           ],
         ),
-        // Left cluster: undo/redo, grouped as one pill.
+        // Left cluster: mode toggle above undo/redo — grouped in a Column
+        // like the right cluster, so spacing stays consistent.
         Positioned(
           left: 10,
           bottom: panelClearance,
-          child: _ButtonPill(
-            items: [
-              _PillItem(icon: Icons.undo, onTap: c.canUndo ? c.undo : null, tooltip: 'Cofnij'),
-              _PillItem(icon: Icons.redo, onTap: c.canRedo ? c.redo : null, tooltip: 'Ponów'),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _ModePill(
+                mode: c.mode,
+                onChanged: (m) {
+                  c.setMode(m);
+                  widget.onModeChanged?.call(m);
+                },
+              ),
+              const SizedBox(height: 10),
+              _ButtonPill(
+                items: [
+                  _PillItem(icon: Icons.undo, onTap: c.canUndo ? c.undo : null, tooltip: 'Cofnij'),
+                  _PillItem(icon: Icons.redo, onTap: c.canRedo ? c.redo : null, tooltip: 'Ponów'),
+                ],
+              ),
             ],
           ),
         ),
@@ -396,6 +446,14 @@ class MapViewState extends State<MapView> {
             ],
           ),
         ),
+        if (!_hintDismissed && c.stops.every((s) => s.latLng == null) && c.pois.isEmpty)
+          Align(
+            alignment: const Alignment(0, -0.32),
+            child: _EmptyStateHint(
+              mode: c.mode,
+              onDismiss: () => setState(() => _hintDismissed = true),
+            ),
+          ),
       ],
       ),
     );
@@ -489,6 +547,81 @@ class _LayerPickerButton extends StatelessWidget {
   }
 }
 
+/// Floating "Trasa" / "Punkty" mode switch — was a full-width segmented
+/// control under the search bar, then a wide two-line pill; now icon-over-
+/// label like a compact tab, same 44px width as the pills below it so the
+/// whole left cluster reads as one narrow column instead of eating map width.
+class _ModePill extends StatelessWidget {
+  final PlannerMode mode;
+  final ValueChanged<PlannerMode> onChanged;
+  const _ModePill({required this.mode, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    // No border here (a border ring + clipped content don't align cleanly
+    // at small radii, and it read as a heavy frame anyway) — just a
+    // rounded, shadowed clip, borderless like the rest of the floating
+    // map controls.
+    return Container(
+      width: 44,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: const [BoxShadow(color: Colors.black45, blurRadius: 10)],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: ColoredBox(
+        color: AppColors.panelSolid.withValues(alpha: 0.92),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _ModeButton(icon: Icons.edit_location_alt_outlined, label: 'Trasa', selected: mode == PlannerMode.route, onTap: () {
+              HapticFeedback.selectionClick();
+              onChanged(PlannerMode.route);
+            }),
+            const Divider(height: 1, thickness: 1, color: AppColors.lineSoft),
+            _ModeButton(icon: Icons.location_on_outlined, label: 'Punkty', selected: mode == PlannerMode.poi, onTap: () {
+              HapticFeedback.selectionClick();
+              onChanged(PlannerMode.poi);
+            }),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ModeButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+  const _ModeButton({required this.icon, required this.label, required this.selected, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = selected ? Colors.white : AppColors.inkDim;
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        width: 44,
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(gradient: selected ? AppColors.accentGradient : null),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 17, color: color),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: TextStyle(color: color, fontWeight: selected ? FontWeight.w700 : FontWeight.w600, fontSize: 8.5, letterSpacing: .1),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _PillItem {
   final IconData icon;
   final VoidCallback? onTap;
@@ -508,20 +641,21 @@ class _ButtonPill extends StatelessWidget {
     return Container(
       width: 44,
       decoration: BoxDecoration(
-        color: AppColors.panelSolid.withValues(alpha: 0.92),
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: AppColors.line),
         boxShadow: const [BoxShadow(color: Colors.black45, blurRadius: 10)],
       ),
       clipBehavior: Clip.antiAlias,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          for (var i = 0; i < items.length; i++) ...[
-            if (i > 0) const Divider(height: 1, thickness: 1, color: AppColors.line),
-            _PillButton(item: items[i]),
+      child: ColoredBox(
+        color: AppColors.panelSolid.withValues(alpha: 0.92),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (var i = 0; i < items.length; i++) ...[
+              if (i > 0) const Divider(height: 1, thickness: 1, color: AppColors.lineSoft),
+              _PillButton(item: items[i]),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -569,7 +703,7 @@ class _RoundIconButton extends StatelessWidget {
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           color: AppColors.panelSolid.withValues(alpha: 0.92),
-          border: Border.all(color: active ? AppColors.accent : AppColors.line, width: active ? 1.5 : 1),
+          border: active ? Border.all(color: AppColors.accent, width: 1.5) : null,
           boxShadow: const [BoxShadow(color: Colors.black45, blurRadius: 10)],
         ),
         alignment: Alignment.center,
@@ -581,6 +715,57 @@ class _RoundIconButton extends StatelessWidget {
               )
             : Icon(icon, size: 20, color: active ? AppColors.accent : AppColors.inkDim),
       ),
+      ),
+    );
+  }
+}
+
+/// Friendly first-look tip shown over an empty map, pointing new users at
+/// the two ways to place the first point — dismisses for the rest of the
+/// session once tapped away or once a point is placed.
+class _EmptyStateHint extends StatelessWidget {
+  final PlannerMode mode;
+  final VoidCallback onDismiss;
+  const _EmptyStateHint({required this.mode, required this.onDismiss});
+
+  @override
+  Widget build(BuildContext context) {
+    final text = mode == PlannerMode.route
+        ? 'Dotknij mapy, aby ustawić start trasy, albo wyszukaj adres u góry.'
+        : 'Wybierz typ punktu w zakładce „Punkty”, potem dotknij mapy.';
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 350),
+      curve: Curves.easeOut,
+      builder: (context, t, child) => Opacity(opacity: t, child: Transform.scale(scale: 0.94 + 0.06 * t, child: child)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 260),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+          decoration: BoxDecoration(
+            color: AppColors.panelSolid.withValues(alpha: 0.94),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.line),
+            boxShadow: const [BoxShadow(color: Colors.black54, blurRadius: 18)],
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('👋', style: TextStyle(fontSize: 20)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(text, style: const TextStyle(color: AppColors.ink, fontSize: 12.5, height: 1.5, fontWeight: FontWeight.w500)),
+              ),
+              GestureDetector(
+                onTap: onDismiss,
+                child: const Padding(
+                  padding: EdgeInsets.only(left: 8, top: 1),
+                  child: Icon(Icons.close, size: 16, color: AppColors.inkDim),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
