@@ -250,6 +250,20 @@
   .admin-user-row .u-email{font-weight:600;font-size:13px;word-break:break-all}
   .admin-user-row .u-meta{font-size:11px;color:var(--ink-dim);margin-top:4px}
   .admin-user-row .u-tracks{margin-top:8px;padding-top:8px;border-top:1px solid var(--line-soft);font-size:12px;color:#c7d2dc}
+  /* viewer mode (tryb prezentacji dla uczestników) */
+  body.viewer-mode #panel,body.viewer-mode #searchWrap,body.viewer-mode #adminBanner{display:none!important}
+  body.viewer-mode .leaflet-top.leaflet-right{top:calc(90px + var(--sat))!important}
+  #viewerHud{display:none;position:fixed;top:calc(14px + var(--sat));left:14px;right:14px;z-index:1500;background:var(--panel);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:1px solid var(--line-soft);border-radius:14px;padding:12px 16px;color:var(--ink);box-shadow:var(--shadow);align-items:center;gap:12px}
+  body.viewer-mode #viewerHud{display:flex}
+  #viewerHud button{background:var(--panel-2);border:1px solid var(--line);color:var(--ink);width:38px;height:38px;border-radius:10px;font-size:16px;cursor:pointer;flex:none}
+  #viewerHud button:hover{border-color:var(--accent)}
+  #viewerPlayBtn{display:none;position:fixed;bottom:calc(28px + var(--sab));left:50%;transform:translateX(-50%);z-index:1500;background:linear-gradient(135deg,var(--accent-2),var(--accent));color:#fff;border:none;padding:18px 36px;border-radius:99px;font:700 17px var(--font);cursor:pointer;box-shadow:0 10px 40px rgba(255,107,26,.5);letter-spacing:.3px;transition:.15s}
+  body.viewer-mode #viewerPlayBtn{display:block}
+  #viewerPlayBtn:hover{filter:brightness(1.08);transform:translateX(-50%) scale(1.02)}
+  #viewerPlayBtn.playing{background:var(--panel-solid);border:2px solid var(--accent)}
+  /* pulsing dot marker */
+  .anim-marker{width:26px;height:26px;border-radius:50%;background:#ff6b1a;border:3px solid #fff;box-shadow:0 0 0 8px rgba(255,107,26,.28),0 3px 12px rgba(0,0,0,.5);animation:animPulse 1.2s ease-in-out infinite}
+  @keyframes animPulse{0%,100%{box-shadow:0 0 0 8px rgba(255,107,26,.28),0 3px 12px rgba(0,0,0,.5)}50%{box-shadow:0 0 0 14px rgba(255,107,26,.14),0 3px 12px rgba(0,0,0,.5)}}
 </style>
 </head>
 <body>
@@ -399,8 +413,16 @@
         <p class="hint">Obracana mapa z ukształtowaniem terenu i Twoją trasą. Na telefonie obracasz i pochylasz dwoma palcami; na komputerze prawym przyciskiem myszy.</p>
       </div>
       <div class="group">
-        <div class="lbl">Eksport</div>
-        <button class="btn primary" id="pngBtn" disabled>📸 Pobierz mapę jako PNG</button>
+        <div class="lbl">Eksport i prezentacja</div>
+        <button class="btn primary" id="playRouteBtn" disabled>▶️ Odtwórz trasę na mapie</button>
+        <p class="hint">Pinezka przejedzie całą trasę na tej mapie. Kliknij ponownie, żeby przerwać.</p>
+        <button class="btn primary" id="viewerShareBtn" style="margin-top:8px">👁 Utwórz link „tylko do oglądania"</button>
+        <div id="viewerShareWrap" style="display:none;margin-top:8px">
+          <input id="viewerShareLink" class="fld" type="text" readonly style="font-size:12px">
+          <button class="btn" id="viewerCopyBtn" style="margin-top:6px">📋 Kopiuj link</button>
+        </div>
+        <p class="hint">Wyśli link uczestnikom — otwiera się jako pełnoekranowa mapa z jednym dużym przyciskiem „Odtwórz". Bez panelu edycji, więc nic nie zmienią.</p>
+        <button class="btn primary" id="pngBtn" disabled style="margin-top:8px">📸 Pobierz mapę jako PNG</button>
         <p class="hint">Obraz z trasą i listą ulic pod spodem — do wysłania jako załącznik lub wydrukowania. Bez ikon punktów.</p>
         <button class="btn primary" id="gpxBtn" disabled style="margin-top:8px">⬇ Pobierz plik GPX</button>
         <p class="hint">GPX wczytasz do zegarka, aplikacji dla zawodników lub przekażesz służbom.</p>
@@ -462,6 +484,14 @@
       <button class="btn plansClose" id="plansCloseBtn">Zamknij</button>
     </div>
   </div>
+  <div id="viewerHud">
+    <div style="flex:1;min-width:0">
+      <div id="vhTitle" style="font:700 17px 'Space Grotesk',sans-serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Trasa</div>
+      <div id="vhMeta" style="font:500 12px 'Space Grotesk',sans-serif;color:#8fa0b0;margin-top:2px">—</div>
+    </div>
+    <button id="vhFitBtn" title="Pokaż całą trasę">🔍</button>
+  </div>
+  <button id="viewerPlayBtn">▶ Odtwórz trasę</button>
   <div id="threeOverlay" style="display:none;position:fixed;inset:0;z-index:5000;background:#000">
     <div id="threeMap" style="position:absolute;inset:0"></div>
     <button id="threeClose" style="position:absolute;top:calc(14px + env(safe-area-inset-top,0px));left:14px;z-index:5001;background:#141a22;color:#fff;border:1px solid #2a3542;border-radius:12px;padding:11px 15px;font-weight:700;cursor:pointer;font-family:inherit">✕ Zamknij 3D</button>
@@ -559,7 +589,7 @@ function clearStop(s){if(s.marker){map.removeLayer(s.marker);s.marker=null;}s.la
 function renderStops(){const wrap=$("stopsList");wrap.innerHTML="";ensureEndpoints();stops.forEach((s,i)=>{const[lab,col]=stopLabel(i);const isEnd=(i===0||i===stops.length-1);const row=document.createElement("div");row.className="stop";row.innerHTML=`<div class="slabel"><span class="dotc" style="background:${col}"></span>${lab}</div><div class="inwrap"><input class="fld" type="text" placeholder="Wpisz adres lub miejsce…" value="${(s.address||"").replace(/"/g,"&quot;")}"><button class="mv up" title="Wyżej">↑</button><button class="mv dn" title="Niżej">↓</button><button class="rm" title="${isEnd?"Wyczyść":"Usuń przystanek"}">${isEnd?"⌫":"✕"}</button></div>`;const input=row.querySelector("input"),up=row.querySelector(".up"),dn=row.querySelector(".dn");up.disabled=(i===0);dn.disabled=(i===stops.length-1);up.onclick=()=>moveStop(i,-1);dn.onclick=()=>moveStop(i,1);row.querySelector(".rm").onclick=()=>{if(isEnd)clearStop(s);else removeStop(s.id);};attachAutocomplete(input,it=>{const ll=L.latLng(it.lat,it.lon);s.latlng=ll;s.address=it.main;if(s.marker)s.marker.setLatLng(ll);else makeStopMarker(s);input.value=s.address;renderStops();map.setView(ll,15);rebuildRoute();});wrap.appendChild(row);});renumberStops();}
 function moveStop(i,dir){const j=i+dir;if(j<0||j>=stops.length)return;const t=stops[i];stops[i]=stops[j];stops[j]=t;renderStops();rebuildRoute();}
 function renderTrackList(){const wrap=$("trackList");if(!wrap)return;wrap.innerHTML="";tracks.forEach(t=>{const isAct=activeTrack&&t.id===activeTrack.id;const row=document.createElement("div");row.className="trackrow"+(isAct?" act":"");const km=(t.meters/1000).toFixed(2).replace(".",",");row.innerHTML=`<span class="dotc" style="background:${t.color};cursor:pointer;width:12px;height:12px;border-radius:50%;flex:none;margin-left:4px"></span><input class="tname fld" value="${(t.name||"").replace(/"/g,"&quot;")}" style="flex:1;min-width:0"><span class="tkm" style="font-size:12px;color:#8fa0b0;white-space:nowrap">${km} km</span>`;const nameInp=row.querySelector(".tname");nameInp.onchange=()=>{t.name=nameInp.value;};nameInp.onclick=e=>e.stopPropagation();const actBtn=document.createElement("button");actBtn.className="mv";actBtn.textContent=isAct?"✏️":"✎";actBtn.title=isAct?"Edytujesz tę trasę":"Edytuj tę trasę";actBtn.onclick=e=>{e.stopPropagation();setActiveTrack(t.id);};row.appendChild(actBtn);if(tracks.length>1){const delBtn=document.createElement("button");delBtn.className="rm";delBtn.textContent="✕";delBtn.title="Usuń trasę";delBtn.onclick=e=>{e.stopPropagation();removeTrack(t.id);};row.appendChild(delBtn);}row.querySelector(".dotc").onclick=()=>setActiveTrack(t.id);wrap.appendChild(row);});}
-function addTrackUI(){const t=newTrack();setActiveTrack(t.id);toast("Dodano nową trasę („"+t.name+"”) — rysuj ją na mapie.");}
+function addTrackUI(){const t=newTrack();setActiveTrack(t.id);setMode("route");toast("✏️ Nowa trasa („"+t.name+"”) — klikaj mapę, żeby ją rysować.");}
 function removeTrack(id){if(tracks.length<=1){toast("To jedyna trasa.");return;}const t=tracks.find(x=>x.id===id);if(!t)return;if(t.line)map.removeLayer(t.line);t.stops.forEach(s=>{if(s.marker)map.removeLayer(s.marker);});const wasActive=activeTrack&&activeTrack.id===id;tracks=tracks.filter(x=>x.id!==id);if(wasActive){activeTrack=null;setActiveTrack(tracks[0].id);}else{renderTrackList();}toast("Usunięto trasę.");}
 async function placeRouteStop(latlng,address){ensureEndpoints();let s;if(!stops[0].latlng)s=stops[0];else if(!stops[stops.length-1].latlng)s=stops[stops.length-1];else{s={id:idSeq++,latlng:null,address:"",marker:null};stops.push(s);}s.latlng=latlng;if(s.marker)s.marker.setLatLng(latlng);else makeStopMarker(s);s.address=address||await reverseGeocode(latlng);renderStops();rebuildRoute();}
 
@@ -597,7 +627,7 @@ async function insertStopOnLine(latlng){
   toast("Dodano przystanek pomiędzy — kolejne przenumerowane.");
 }
 function drawKmMarkers(){if(kmLayer){map.removeLayer(kmLayer);kmLayer=null;}if(!showKm||lastGeometry.length<2)return;kmLayer=L.layerGroup().addTo(map);for(let km=1;km*1000<totalMeters;km++)L.marker(pointAtMeters(km*1000),{icon:L.divIcon({className:"kmlabel",html:`${km} km`,iconSize:null}),interactive:false}).addTo(kmLayer);}
-function updateStats(){syncActive();const sum=tracks.reduce((a,t)=>a+(t.meters||0),0);$("distVal").textContent=(sum/1000).toFixed(2).replace(".",",");const db=$("distBadge");if(db)db.textContent=(tracks.length>1?"📏 Suma: ":"📏 Trasa: ")+(sum/1000).toFixed(2).replace(".",",")+" km"+(tracks.length>1&&activeTrack?" (tu: "+(totalMeters/1000).toFixed(2).replace(".",",")+")":"");$("cpVal").textContent=pois.filter(p=>p.type==="checkpoint").length;$("poiCount").textContent=pois.length;$("listCount").textContent=pois.length;$("clearPoiBtn").disabled=pois.length===0;$("gpxBtn").disabled=lastGeometry.length<2&&pois.length===0;const _pngBtn=$("pngBtn");if(_pngBtn)_pngBtn.disabled=!tracks.some(t=>t.geometry&&t.geometry.length>=2);try{updateTime();}catch(e){}}
+function updateStats(){syncActive();const sum=tracks.reduce((a,t)=>a+(t.meters||0),0);$("distVal").textContent=(sum/1000).toFixed(2).replace(".",",");const db=$("distBadge");if(db)db.textContent=(tracks.length>1?"📏 Suma: ":"📏 Trasa: ")+(sum/1000).toFixed(2).replace(".",",")+" km"+(tracks.length>1&&activeTrack?" (tu: "+(totalMeters/1000).toFixed(2).replace(".",",")+")":"");$("cpVal").textContent=pois.filter(p=>p.type==="checkpoint").length;$("poiCount").textContent=pois.length;$("listCount").textContent=pois.length;$("clearPoiBtn").disabled=pois.length===0;$("gpxBtn").disabled=lastGeometry.length<2&&pois.length===0;const _pngBtn=$("pngBtn");if(_pngBtn)_pngBtn.disabled=!tracks.some(t=>t.geometry&&t.geometry.length>=2);const _playBtn=$("playRouteBtn");if(_playBtn)_playBtn.disabled=!tracks.some(t=>t.geometry&&t.geometry.length>=2);try{updateTime();}catch(e){}}
 
 function addPoi(type,latlng,name){const id=idSeq++;const obj={id,type,latlng,name:name||"",note:""};obj.marker=L.marker(latlng,{icon:poiIcon(type),draggable:true}).addTo(map);obj.marker.on("dragend",()=>{obj.latlng=obj.marker.getLatLng();renderPoiList();});obj.marker.on("click",()=>openEditor(id));pois.push(obj);renderPoiList();updateStats();return obj;}
 function renderPoiList(){const el=$("poiList");if(pois.length===0){el.innerHTML='<div class="empty">Brak punktów. Wybierz typ powyżej i kliknij na mapie, albo rozmieść automatycznie.</div>';return;}const cps=pois.filter(p=>p.type==="checkpoint").map(p=>({p,km:kmAlong(p.latlng)??1e9})).sort((a,b)=>a.km-b.km);cps.forEach((x,i)=>x.p._cpNo=i+1);pois.forEach(p=>p.marker.setIcon(poiIcon(p.type,p.type==="checkpoint"?p._cpNo:null)));el.innerHTML="";Object.keys(POI).forEach(type=>{const group=pois.filter(p=>p.type===type);if(!group.length)return;const head=document.createElement("div");head.className="poiGroupHead";head.style.borderLeft="4px solid "+POI[type].color;head.style.paddingLeft="8px";head.innerHTML=`<span class="ic">${POI[type].ic}</span><span class="gl">${POI[type].label}</span><span class="count" style="background:${POI[type].color}">${group.length}</span>`;el.appendChild(head);const sorted=group.map(p=>({p,km:kmAlong(p.latlng)})).sort((a,b)=>(a.km??1e9)-(b.km??1e9));sorted.forEach(({p,km})=>{const def=POI[p.type].label+(p.type==="checkpoint"?" "+p._cpNo:"");const display=p.name||def;const kmTxt=km!=null?km.toFixed(2).replace(".",",")+" km":"—";const item=document.createElement("div");item.className="poiItem";item.dataset.id=p.id;item.innerHTML=`<div class="head"><span class="ic">${POI[p.type].ic}</span><span class="nm">${display.replace(/</g,"&lt;")}</span><span class="km">${kmTxt}</span><button class="del" title="Usuń">✕</button></div><div class="edit"><input type="text" class="fld" placeholder="Nazwa (np. ${def})" value="${(p.name||"").replace(/"/g,"&quot;")}"><textarea class="fld" placeholder="Notatka — obsada, sprzęt, godziny otwarcia">${(p.note||"").replace(/</g,"&lt;")}</textarea></div>`;item.querySelector(".head").onclick=ev=>{if(ev.target.classList.contains("del")){map.removeLayer(p.marker);pois=pois.filter(x=>x.id!==p.id);renderPoiList();updateStats();return;}item.classList.toggle("open");if(item.classList.contains("open"))map.panTo(p.latlng);};const ni=item.querySelector("input"),ta=item.querySelector("textarea");ni.oninput=()=>{p.name=ni.value;item.querySelector(".nm").textContent=p.name||def;};ta.oninput=()=>{p.note=ta.value;};el.appendChild(item);});});}
@@ -618,7 +648,7 @@ map.on("click",e=>{if(mode==="route"){let near=null,nd=18;tracks.forEach(t=>{if(
 
 $("distribBtn").onclick=()=>{if(lastGeometry.length<2){toast("Najpierw wyznacz trasę.");return;}const every=parseFloat($("cpEvery").value)*1000;if(!every||every<50){toast("Podaj odstęp większy niż 0,05 km.");return;}let added=0;for(let d=every;d<totalMeters;d+=every){addPoi("checkpoint",pointAtMeters(d));added++;}toast(added?`Rozmieszczono ${added} punktów kontrolnych`:"Trasa za krótka dla tego odstępu");};
 $("addStopBtn").onclick=()=>{setMode("route");ensureEndpoints();const s={id:idSeq++,latlng:null,address:"",marker:null};stops.splice(stops.length-1,0,s);renderStops();const ins=document.querySelectorAll("#stopsList input");if(ins.length>=2)ins[ins.length-2].focus();};
-$("poiChips").addEventListener("click",e=>{const b=e.target.closest(".chip");if(!b)return;poiType=b.dataset.type;[...e.currentTarget.children].forEach(c=>c.classList.toggle("on",c===b));setMode("poi");});
+$("poiChips").addEventListener("click",e=>{const b=e.target.closest(".chip");if(!b)return;poiType=b.dataset.type;[...e.currentTarget.children].forEach(c=>c.classList.toggle("on",c===b));setMode("poi");toast("🎯 Tryb: "+POI[poiType].label+". Klikaj mapę. Powrót → ✏️ Rysuj trasę u góry.");});
 $("snapToggle").addEventListener("click",function(){snap=!snap;this.classList.toggle("on",snap);rebuildRoute();});
 $("kmToggle").addEventListener("click",function(){showKm=!showKm;this.classList.toggle("on",showKm);drawKmMarkers();});
 $("clearPoiBtn").onclick=()=>{pois.forEach(p=>map.removeLayer(p.marker));pois=[];renderPoiList();updateStats();};
@@ -737,8 +767,8 @@ function loadFromHash(){
   if(h.indexOf("#p=")===0){
     try{const data=JSON.parse(LZString.decompressFromEncodedURIComponent(h.slice(3)));if(data){loadProject(data);toast("Wczytano projekt z linku.");return;}}catch(e){toast("Nie udało się odczytać projektu z linku.");}
   }
-  // brak linku z projektem i brak pokoju -> spróbuj wczytać autozapis z tego urządzenia
-  if(h.indexOf("#room=")!==0){
+  // brak linku z projektem, brak pokoju, brak trybu prezentacji -> spróbuj wczytać autozapis z tego urządzenia
+  if(h.indexOf("#room=")!==0 && h.indexOf("#view=")!==0){
     try{const saved=localStorage.getItem("planer_autosave");if(saved){const d=JSON.parse(saved);const hasTrack=d&&d.tracks&&d.tracks.some(t=>t.stops&&t.stops.length);const hasOld=d&&d.stops&&d.stops.length;if(d&&(hasTrack||hasOld||(d.pois&&d.pois.length))){loadProject(d);toast("Przywrócono ostatni projekt z tego urządzenia.");}}}catch(e){}
   }
 }
@@ -1383,6 +1413,155 @@ window.addEventListener("appinstalled",()=>{$("installGroup").style.display="non
   const standalone=window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone===true;
   if(isIOS&&!standalone)$("iosHintGroup").style.display="block";
 })();
+// ==========================================================
+// ANIMACJA TRASY NA MAPIE + TRYB PREZENTACJI (VIEWER)
+// ==========================================================
+// Buduje jedną ciągłą ścieżkę ze wszystkich tras.
+function animBuildFullPath(){
+  const path=[]; let cum=0;
+  tracks.forEach((t,ti)=>{
+    if(!t.geometry||t.geometry.length<2) return;
+    for(let i=0;i<t.geometry.length;i++){
+      const [lat,lng]=t.geometry[i];
+      if(i>0){ const prev=t.geometry[i-1]; cum+=haversine({lat:prev[0],lng:prev[1]},{lat,lng}); }
+      path.push({lat,lng,dist:cum,color:t.color,trackIdx:ti,trackName:t.name});
+    }
+  });
+  return {path,total:cum};
+}
+function animPointAtMeters(path,target){
+  if(!path.length) return null;
+  if(target<=0) return path[0];
+  if(target>=path[path.length-1].dist) return path[path.length-1];
+  let lo=0,hi=path.length-1;
+  while(lo<hi-1){ const mid=(lo+hi)>>1; if(path[mid].dist<=target) lo=mid; else hi=mid; }
+  const a=path[lo], b=path[hi]; const seg=b.dist-a.dist||1; const t=(target-a.dist)/seg;
+  return {lat:a.lat+(b.lat-a.lat)*t, lng:a.lng+(b.lng-a.lng)*t, color:b.color, trackIdx:b.trackIdx, trackName:b.trackName};
+}
+
+// Marker animowany na widocznej mapie Leaflet.
+let mapAnim={marker:null, rafId:null, startedAt:0, duration:20000, origBadge:""};
+function playOnMap(fromViewer){
+  // Toggle: jeśli gra, zatrzymaj
+  if(mapAnim.rafId){ stopOnMap(); return; }
+  const {path,total}=animBuildFullPath();
+  if(!path.length||total<1){ toast("Brak trasy do odtworzenia."); return; }
+  // Dopasuj widok do całej trasy
+  try{ map.invalidateSize(); const b=L.latLngBounds(path.map(p=>[p.lat,p.lng])); map.fitBounds(b.pad(0.15),{animate:false}); }catch(e){}
+  // Marker
+  if(mapAnim.marker){ map.removeLayer(mapAnim.marker); }
+  mapAnim.marker=L.marker([path[0].lat,path[0].lng],{
+    icon:L.divIcon({className:"",iconSize:[26,26],iconAnchor:[13,13],html:'<div class="anim-marker"></div>'}),
+    interactive:false, zIndexOffset:10000
+  }).addTo(map);
+  // Zapamiętaj i podmień badge dystansu (na czas animacji pokazujemy postęp)
+  const db=$("distBadge"); mapAnim.origBadge=db? db.textContent:"";
+  // Duration na podstawie długości trasy: 15s dla ≤5 km, 30s dla ≥15 km, liniowo między
+  const km=total/1000;
+  mapAnim.duration=Math.round(1000*Math.max(12,Math.min(35, 10+km*1.5)));
+  mapAnim.startedAt=performance.now();
+  // UI: przełącz przycisk na "Zatrzymaj"
+  const btn=$("playRouteBtn"); if(btn){ btn.dataset.orig=btn.textContent; btn.textContent="⏹ Zatrzymaj"; }
+  const vbtn=$("viewerPlayBtn"); if(vbtn){ vbtn.dataset.orig=vbtn.textContent; vbtn.textContent="⏹ Zatrzymaj"; vbtn.classList.add("playing"); }
+  function step(now){
+    if(!mapAnim.rafId && mapAnim.rafId!==0) return;
+    const elapsed=now-mapAnim.startedAt;
+    const progress=Math.min(1, elapsed/mapAnim.duration);
+    const dist=total*progress;
+    const pos=animPointAtMeters(path,dist);
+    if(mapAnim.marker) mapAnim.marker.setLatLng([pos.lat,pos.lng]);
+    // Aktualizuj badge z dystansem-progressem
+    if(db){
+      const cur=(dist/1000).toFixed(2).replace(".",",");
+      const tot=(total/1000).toFixed(2).replace(".",",");
+      const stg = tracks.length>1 && pos && pos.trackName ? " · "+pos.trackName : "";
+      db.textContent="🏃 "+cur+" / "+tot+" km"+stg;
+    }
+    // Meta HUD dla trybu viewer
+    if(fromViewer){
+      const vm=$("vhMeta"); if(vm) vm.textContent = "🏃 "+(dist/1000).toFixed(2).replace(".",",")+" / "+(total/1000).toFixed(2).replace(".",",")+" km"+(tracks.length>1&&pos.trackName?" · "+pos.trackName:"");
+    }
+    if(progress<1){
+      mapAnim.rafId=requestAnimationFrame(step);
+    } else {
+      // Koniec: zostaw marker na mecie na 3 s
+      mapAnim.rafId=null;
+      if(btn) btn.textContent=btn.dataset.orig||"▶️ Odtwórz trasę na mapie";
+      if(vbtn){ vbtn.textContent=vbtn.dataset.orig||"▶ Odtwórz trasę"; vbtn.classList.remove("playing"); }
+      setTimeout(()=>{
+        if(mapAnim.marker){ map.removeLayer(mapAnim.marker); mapAnim.marker=null; }
+        if(db) db.textContent=mapAnim.origBadge;
+        if(fromViewer){ const vm=$("vhMeta"); if(vm) viewerUpdateMeta(); }
+      }, 3000);
+    }
+  }
+  mapAnim.rafId=requestAnimationFrame(step);
+}
+function stopOnMap(){
+  if(mapAnim.rafId){ cancelAnimationFrame(mapAnim.rafId); mapAnim.rafId=null; }
+  if(mapAnim.marker){ map.removeLayer(mapAnim.marker); mapAnim.marker=null; }
+  const btn=$("playRouteBtn"); if(btn) btn.textContent=btn.dataset.orig||"▶️ Odtwórz trasę na mapie";
+  const vbtn=$("viewerPlayBtn"); if(vbtn){ vbtn.textContent=vbtn.dataset.orig||"▶ Odtwórz trasę"; vbtn.classList.remove("playing"); }
+  const db=$("distBadge"); if(db && mapAnim.origBadge) db.textContent=mapAnim.origBadge;
+  const vm=$("vhMeta"); if(vm && document.body.classList.contains("viewer-mode")) viewerUpdateMeta();
+}
+$("playRouteBtn").onclick=()=>playOnMap(false);
+$("viewerPlayBtn").onclick=()=>playOnMap(true);
+
+// Link „tylko do oglądania" (viewer mode)
+$("viewerShareBtn").onclick=()=>{
+  try{
+    const enc=LZString.compressToEncodedURIComponent(JSON.stringify(serialize()));
+    const url=location.origin+location.pathname+"#view="+enc;
+    $("viewerShareLink").value=url; $("viewerShareWrap").style.display="block";
+    if(navigator.clipboard) navigator.clipboard.writeText(url).then(()=>toast("Link prezentacji skopiowany ✓")).catch(()=>toast("Link gotowy — skopiuj poniżej."));
+    else toast("Link gotowy — skopiuj poniżej.");
+    if(url.length>7000) toast("Uwaga: link jest bardzo długi.");
+  }catch(e){ toast("Nie udało się utworzyć linku prezentacji."); }
+};
+$("viewerCopyBtn").onclick=async()=>{
+  const i=$("viewerShareLink"); i.select();
+  try{ await navigator.clipboard.writeText(i.value); }catch(e){ try{ document.execCommand("copy"); }catch(_){} }
+  toast("Skopiowano.");
+};
+
+// Meta pod tytułem w HUD (dystans + liczba etapów)
+function viewerUpdateMeta(){
+  const vm=$("vhMeta"); if(!vm) return;
+  const km=tracks.reduce((a,t)=>a+(t.meters||0),0)/1000;
+  const parts=[km.toFixed(2).replace(".",",")+" km"];
+  if(tracks.length>1) parts.push(tracks.length+" etapów");
+  const cpc=pois.filter(p=>p.type==="checkpoint").length;
+  if(cpc) parts.push(cpc+" pkt. kontrolnych");
+  vm.textContent="🏁 "+parts.join(" · ");
+}
+$("vhFitBtn") && ($("vhFitBtn").onclick=()=>{ try{ fitToRoute(); }catch(e){} });
+
+// Aktywacja trybu prezentacji po wykryciu #view= w URL — po standardowym loadFromHash
+async function activateViewerModeIfNeeded(){
+  const h=location.hash||"";
+  if(!h.startsWith("#view=")) return;
+  try{
+    const data=JSON.parse(LZString.decompressFromEncodedURIComponent(h.slice(6)));
+    if(!data) return;
+    await loadProject(data,false);
+    document.body.classList.add("viewer-mode");
+    const nm=(data.name||"Trasa").trim();
+    const vt=$("vhTitle"); if(vt) vt.textContent=nm;
+    viewerUpdateMeta();
+    try{ fitToRoute(); setTimeout(fitToRoute,300); }catch(e){}
+    toast("Tryb prezentacji — kliknij ▶ Odtwórz trasę.");
+  }catch(e){ console.error(e); toast("Nie udało się otworzyć podglądu."); }
+}
+// Podmiana obsługi hash: obsłuż #view= (musi być PO tym jak loadFromHash już zdefiniowane wcześniej)
+(function(){
+  const h=location.hash||"";
+  if(h.startsWith("#view=")){
+    // Zablokuj automatyczne wczytanie autozapisu z loadFromHash — wywołaj nasz handler zamiast
+    setTimeout(activateViewerModeIfNeeded, 100);
+  }
+})();
+
 // ==========================================================
 // LOGOWANIE, TRASY W CHMURZE, PANEL ADMINA
 // ==========================================================
