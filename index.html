@@ -508,10 +508,10 @@ function setActiveTrack(id){
 }
 
 const map=L.map("map",{zoomControl:false}).setView([52.2297,21.0122],13);
-const baseRoads=L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",{maxZoom:20,subdomains:"abcd",crossOrigin:true,attribution:"&copy; OpenStreetMap &copy; CARTO"}).addTo(map);
-const baseOSM=L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,crossOrigin:true,attribution:"&copy; OpenStreetMap"});
+const baseRoads=L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,crossOrigin:true,attribution:"&copy; OpenStreetMap contributors"}).addTo(map);
+const baseTopo=L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",{maxZoom:17,subdomains:"abc",crossOrigin:true,attribution:"&copy; OpenStreetMap · &copy; OpenTopoMap (CC-BY-SA)"});
 const baseSat=L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",{maxZoom:19,crossOrigin:true,attribution:"&copy; Esri"});
-L.control.layers({"Mapa drogowa":baseRoads,"OpenStreetMap":baseOSM,"Satelita":baseSat},null,{position:"topright"}).addTo(map);
+L.control.layers({"Mapa drogowa (OSM)":baseRoads,"Turystyczna (topo)":baseTopo,"Satelita":baseSat},null,{position:"topright"}).addTo(map);
 L.control.zoom({position:"topright"}).addTo(map);
 const $=id=>document.getElementById(id);
 // ===== KONFIGURACJA FIREBASE (do współpracy na żywo) =====
@@ -793,7 +793,7 @@ async function open3D(){
     container:"threeMap",
     style:{version:8,
       sources:{
-        base:{type:"raster",tiles:["https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png","https://b.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png","https://c.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png"],tileSize:256,attribution:"© OpenStreetMap © CARTO"},
+        base:{type:"raster",tiles:["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],tileSize:256,attribution:"© OpenStreetMap contributors"},
         dem:{type:"raster-dem",tiles:["https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"],encoding:"terrarium",tileSize:256,maxzoom:14}
       },
       layers:[{id:"base",type:"raster",source:"base"}],
@@ -870,12 +870,12 @@ async function gatherStreetNames(){
 }
 
 // ===== EKSPORT PNG — statyczna mapa w wysokiej rozdzielczości =====
-// Nie robimy screenshotu ekranu — pobieramy kafle z serwera CARTO w wersji @2x
+// Nie robimy screenshotu ekranu — pobieramy kafle z serwera OpenStreetMap
 // i komponujemy obraz o stałej szerokości 1800 px, niezależnie od rozmiaru ekranu.
 
-// Web Mercator → piksel (rozmiar kafla @2x = 512 px)
+// Web Mercator → piksel (rozmiar kafla OSM = 256 px)
 function pngLngLatToPixel(lng, lat, zoom){
-  const n=Math.pow(2,zoom), size=512;
+  const n=Math.pow(2,zoom), size=256;
   const x=((lng+180)/360)*n*size;
   const latRad=lat*Math.PI/180;
   const y=(1-Math.log(Math.tan(latRad)+1/Math.cos(latRad))/Math.PI)/2*n*size;
@@ -891,7 +891,7 @@ function pngLoadImg(url){
   });
 }
 async function renderStaticMap(canvasW,canvasH){
-  const TILE=512;
+  const TILE=256;
   const all=[];
   tracks.forEach(t=>{ if(t.geometry&&t.geometry.length>=2) t.geometry.forEach(g=>all.push([g[0],g[1]])); });
   if(all.length<2) return null;
@@ -925,10 +925,9 @@ async function renderStaticMap(canvasW,canvasH){
     for(let ty=tileMinY;ty<=tileMaxY;ty++){
       const wrapX=((tx%nTiles)+nTiles)%nTiles;
       const sub=subs[Math.abs(tx+ty)%4];
-      const url2x=`https://${sub}.basemaps.cartocdn.com/rastertiles/voyager/${zoom}/${wrapX}/${ty}@2x.png`;
-      const url1x=`https://${sub}.basemaps.cartocdn.com/rastertiles/voyager/${zoom}/${wrapX}/${ty}.png`;
+      const url1x=`https://tile.openstreetmap.org/${zoom}/${wrapX}/${ty}.png`;
       jobs.push(
-        pngLoadImg(url2x).then(img=>img||pngLoadImg(url1x)).then(img=>{
+        pngLoadImg(url1x).then(img=>{
           if(!img) return;
           const px=tx*TILE-originX, py=ty*TILE-originY;
           ctx.drawImage(img,px,py,TILE,TILE);
@@ -1208,7 +1207,7 @@ async function exportPNG(){
     fx.fillStyle="#0a0e13"; fx.fillRect(0,fy,W,footerH);
     fx.fillStyle="#8fa0b0"; fx.textAlign="center"; fx.textBaseline="middle";
     fx.font="14px 'Space Grotesk', system-ui, sans-serif";
-    fx.fillText("© OpenStreetMap · CARTO · dane wysokości: Open-Meteo · wygenerowano w Planerze Trasy", W/2, fy+footerH/2);
+    fx.fillText("© OpenStreetMap contributors · dane wysokości: Open-Meteo · wygenerowano w Planerze Trasy", W/2, fy+footerH/2);
     // ===== POBIERZ =====
     finalC.toBlob(blob=>{
       if(!blob){ toast("Nie udało się wygenerować PNG. Spróbuj ponownie."); return; }
