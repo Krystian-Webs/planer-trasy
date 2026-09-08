@@ -1,5 +1,5 @@
 // Service worker dla Planera Trasy — instalacja + offline, z automatyczną aktualizacją.
-const CACHE = "planer-trasy-v19";
+const CACHE = "planer-trasy-v20";
 const SHELL = [
   "./",
   "index.html",
@@ -35,16 +35,6 @@ self.addEventListener("fetch", e => {
       }).catch(() => caches.match(req))
     );
   } else {
-    // biblioteki i czcionki z CDN: najpierw cache (rzadko się zmieniają)
-    e.respondWith(
-      caches.match(req).then(r => r || fetch(req).then(resp => {
-        const cp = resp.clone();
-        caches.open(CACHE).then(c => c.put(req, cp).catch(() => {}));
-        return resp;
-      }).catch(() => r))
-    );
-  }
-});  } else {
     // biblioteki i czcionki z CDN: najpierw cache (rzadko się zmieniają)
     e.respondWith(
       caches.match(req).then(r => r || fetch(req).then(resp => {
