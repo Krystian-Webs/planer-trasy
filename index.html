@@ -269,10 +269,19 @@
   body.embed-mode .leaflet-marker-pane{display:none!important}
   body.embed-mode .leaflet-tooltip-pane,body.embed-mode .leaflet-popup-pane{display:none!important}
   body.embed-mode .leaflet-control-zoom,body.embed-mode .leaflet-control-layers{display:none!important}
-  body.embed-mode .leaflet-control-attribution{font-size:9px!important;padding:1px 4px!important}
-  body.embed-mode #map{background:#0a0e13}
-  /* separate pane for animation marker — nie ukrywa się z resztą markerów */
+  body.embed-mode .leaflet-control-attribution{font-size:9px!important;padding:1px 4px!important;background:rgba(0,0,0,.6)!important;color:#8fa0b0!important}
+  body.embed-mode .leaflet-control-attribution a{color:#c7d2dc!important}
+  body.embed-mode #map{background:#000}
+  /* Bazowe polilinie tras są (prawie) ukryte — pokazujemy je tylko jako subtelną wskazówkę */
+  body.embed-mode .leaflet-overlay-pane{opacity:.12}
+  /* Separatny pane dla markera animacji — nie ukrywa się z resztą markerów */
   .leaflet-anim-pane{z-index:650!important;pointer-events:none}
+  /* Separatny pane dla „odkrytego" świecącego śladu — rysowany NAD ciemną zasłoną */
+  .leaflet-reveal-pane{z-index:460!important;pointer-events:none;opacity:1!important}
+  .leaflet-reveal-pane path{filter:drop-shadow(0 0 3px #ff6b1a) drop-shadow(0 0 8px rgba(255,107,26,.75))}
+  /* Ciemna zasłona nad mapą — pomiędzy tilesami (z 200) a overlay pane (z 400) */
+  .map-dark-veil{position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.90);z-index:250;pointer-events:none}
+  body.embed-mode .anim-marker{background:#ff6b1a;border:3px solid #fff;box-shadow:0 0 0 10px rgba(255,107,26,.35),0 0 24px #ff6b1a,0 0 40px rgba(255,107,26,.6),0 3px 12px rgba(0,0,0,.9)}
   #embedCtrl{display:none;position:fixed;bottom:14px;right:14px;z-index:1500;background:rgba(20,26,34,.94);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid var(--line-soft);border-radius:99px;padding:5px 6px;gap:2px;box-shadow:var(--shadow-sm)}
   body.embed-mode #embedCtrl{display:flex}
   #embedCtrl button{background:transparent;border:0;color:#fff;padding:8px 12px;font:600 12px var(--font);cursor:pointer;border-radius:99px;min-width:38px}
@@ -1472,20 +1481,29 @@ function ensureAnimPane(){
   }
   return "anim";
 }
+// Dedykowany pane dla „odkrytego" świecącego śladu w embed
+function ensureRevealPane(){
+  if(!map.getPane("reveal")){
+    map.createPane("reveal");
+    const p=map.getPane("reveal"); p.classList.add("leaflet-reveal-pane");
+  }
+  return "reveal";
+}
 
-let mapAnim={marker:null, rafId:null, startedAt:0, duration:20000, origBadge:"", loop:false, mode:"editor"};
+let mapAnim={marker:null, rafId:null, startedAt:0, duration:20000, origBadge:"", loop:false, mode:"editor", revealLine:null, darkVeil:null, revealedIdx:0};
 function playOnMap(mode){
   // mode: "editor" | "viewer" | "embed"
   mode=mode||"editor";
   if(mapAnim.rafId){ stopOnMap(); if(!mapAnim.loop) return; }
   const {path,total}=animBuildFullPath();
   if(!path.length||total<1){ if(mode==="editor") toast("Brak trasy do odtworzenia."); return; }
-  // Dopasowanie widoku — embed mocniej z bliska, viewer średnio, editor delikatnie
+  // Dopasowanie widoku — embed najbliżej, viewer średnio, editor delikatnie
   try{
     map.invalidateSize();
     const b=L.latLngBounds(path.map(p=>[p.lat,p.lng]));
-    const padPx = mode==="embed"? [22,22] : mode==="viewer"? [40,40] : [60,60];
-    map.fitBounds(b,{padding:padPx, animate:false, maxZoom:18});
+    const padPx = mode==="embed"? [10,10] : mode==="viewer"? [40,40] : [60,60];
+    const maxZ  = mode==="embed"? 19 : 18;
+    map.fitBounds(b,{padding:padPx, animate:false, maxZoom:maxZ});
   }catch(e){}
   ensureAnimPane();
   if(mapAnim.marker){ map.removeLayer(mapAnim.marker); }
@@ -1494,6 +1512,22 @@ function playOnMap(mode){
     icon:L.divIcon({className:"",iconSize:[26,26],iconAnchor:[13,13],html:'<div class="anim-marker"></div>'}),
     interactive:false, zIndexOffset:10000
   }).addTo(map);
+  // === EMBED: ciemna zasłona nad mapą + rysujący się jasny ślad ===
+  if(mode==="embed"){
+    if(!mapAnim.darkVeil){
+      mapAnim.darkVeil=document.createElement("div");
+      mapAnim.darkVeil.className="map-dark-veil";
+      map.getContainer().appendChild(mapAnim.darkVeil);
+    }
+    ensureRevealPane();
+    if(mapAnim.revealLine){ map.removeLayer(mapAnim.revealLine); }
+    mapAnim.revealLine=L.polyline([[path[0].lat,path[0].lng]],{
+      pane:"reveal",
+      color:"#ff6b1a", weight:5, opacity:1,
+      lineCap:"round", lineJoin:"round"
+    }).addTo(map);
+    mapAnim.revealedIdx=0;
+  }
   const km=total/1000;
   mapAnim.duration=Math.round(1000*Math.max(12,Math.min(35, 10+km*1.5)));
   mapAnim.startedAt=performance.now();
@@ -1511,6 +1545,26 @@ function playOnMap(mode){
     const dist=total*progress;
     const pos=animPointAtMeters(path,dist);
     if(mapAnim.marker) mapAnim.marker.setLatLng([pos.lat,pos.lng]);
+    // === EMBED: rozszerz linię do bieżącego punktu ===
+    if(mode==="embed" && mapAnim.revealLine){
+      // dodaj wszystkie punkty ścieżki, które właśnie „minęliśmy" (efektywnie — nie iterujemy od zera)
+      while(mapAnim.revealedIdx+1 < path.length && path[mapAnim.revealedIdx+1].dist <= dist){
+        mapAnim.revealedIdx++;
+        mapAnim.revealLine.addLatLng([path[mapAnim.revealedIdx].lat, path[mapAnim.revealedIdx].lng]);
+      }
+      // interpolowany „czoło" ostatniego segmentu
+      const latlngs=mapAnim.revealLine.getLatLngs();
+      const head=latlngs[latlngs.length-1];
+      if(!head || Math.abs(head.lat-pos.lat)>1e-9 || Math.abs(head.lng-pos.lng)>1e-9){
+        // Zastąp ostatni (interpolowany) punkt lub dodaj nowy
+        if(latlngs.length>mapAnim.revealedIdx+1){
+          latlngs[latlngs.length-1]=L.latLng(pos.lat,pos.lng);
+          mapAnim.revealLine.setLatLngs(latlngs);
+        } else {
+          mapAnim.revealLine.addLatLng([pos.lat,pos.lng]);
+        }
+      }
+    }
     if(db){
       const cur=(dist/1000).toFixed(2).replace(".",",");
       const tot=(total/1000).toFixed(2).replace(".",",");
@@ -1526,7 +1580,13 @@ function playOnMap(mode){
       mapAnim.rafId=null;
       if(mapAnim.loop){
         // Pauza 1.5 s po ukończeniu, potem od nowa
-        setTimeout(()=>{ if(!mapAnim.rafId && document.body.classList.contains("embed-mode")) playOnMap(mode); }, 1500);
+        setTimeout(()=>{
+          if(!mapAnim.rafId && document.body.classList.contains("embed-mode")){
+            // Wyczyść odkryty ślad przed nowym cyklem (żeby narysował się od zera)
+            if(mapAnim.revealLine){ map.removeLayer(mapAnim.revealLine); mapAnim.revealLine=null; }
+            playOnMap(mode);
+          }
+        }, 1500);
       } else {
         if(btn) btn.textContent=btn.dataset.orig||"▶️ Odtwórz trasę na mapie";
         if(vbtn){ vbtn.textContent=vbtn.dataset.orig||"▶ Odtwórz trasę"; vbtn.classList.remove("playing"); }
@@ -1545,6 +1605,8 @@ function stopOnMap(){
   if(mapAnim.rafId){ cancelAnimationFrame(mapAnim.rafId); mapAnim.rafId=null; }
   mapAnim.loop=false;
   if(mapAnim.marker){ map.removeLayer(mapAnim.marker); mapAnim.marker=null; }
+  if(mapAnim.revealLine){ map.removeLayer(mapAnim.revealLine); mapAnim.revealLine=null; }
+  if(mapAnim.darkVeil){ mapAnim.darkVeil.remove(); mapAnim.darkVeil=null; }
   const btn=$("playRouteBtn"); if(btn) btn.textContent=btn.dataset.orig||"▶️ Odtwórz trasę na mapie";
   const vbtn=$("viewerPlayBtn"); if(vbtn){ vbtn.textContent=vbtn.dataset.orig||"▶ Odtwórz trasę"; vbtn.classList.remove("playing"); }
   const ebtn=$("embedPlayBtn"); if(ebtn) ebtn.textContent="▶";
