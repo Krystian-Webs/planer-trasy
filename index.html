@@ -392,8 +392,8 @@
       <div class="group">
         <div class="lbl">Trasy (warianty / kolory)</div>
         <div id="trackList"></div>
-        <button class="addstop" id="addTrackBtn">＋ Dodaj kolejną trasę (inny kolor)</button>
-        <p class="hint">Każda trasa ma swój kolor i jest widoczna na tej samej mapie. „Edytuj" (✎) wybiera, którą teraz rysujesz. Np. pętla 5 km na pomarańczowo + dodatkowe 4 km na niebiesko = wariant 10 km.</p>
+        <button class="addstop" id="addTrackBtn">＋ Nowa trasa (osobny projekt)</button>
+        <p class="hint">Otwiera pusty projekt do narysowania nowej trasy. Jeśli jesteś zalogowany, bieżąca trasa zapisze się automatycznie w chmurze — potem wczytasz ją z sekcji „☁️ Twoje trasy w chmurze" u góry. Każdy projekt ma własny link do prezentacji i osobny kod embed.</p>
       </div>
       <div class="group">
         <div class="lbl">Trasa — wpisz adresy</div>
@@ -1419,7 +1419,7 @@ const PLAN_FEATURES={
   pro:["basic","multitrack","distribute","propose","elevation","view3d","gpx","share"],
   admin:"*"
 };
-const GATED_BUTTONS={addTrackBtn:"multitrack",distribBtn:"distribute",proposeBtn:"propose",elevBtn:"elevation",threeBtn:"view3d",gpxBtn:"gpx",shareBtn:"share",liveBtn:"live"};
+const GATED_BUTTONS={distribBtn:"distribute",proposeBtn:"propose",elevBtn:"elevation",threeBtn:"view3d",gpxBtn:"gpx",shareBtn:"share",liveBtn:"live"};
 const FEATURE_NAMES={multitrack:"Wiele tras",distribute:"Automatyczne punkty kontrolne",propose:"Propozycja trasy",elevation:"Profil wysokości",view3d:"Widok 3D",gpx:"Eksport GPX",share:"Udostępnianie linkiem",live:"Współpraca na żywo"};
 let plan=(function(){try{return localStorage.getItem("planer_plan")||DEFAULT_PLAN;}catch(e){return DEFAULT_PLAN;}})();
 if(!PLAN_META[plan])plan=DEFAULT_PLAN;
@@ -1464,7 +1464,31 @@ if(!tracks.length){activeTrack=newTrack("Trasa 1",TRACK_COLORS[0]);stops=activeT
 renderTrackList();
 renderStops();updateStats();searchInfoText();
 $("fitBtn").onclick=fitToRoute;
-$("addTrackBtn").onclick=(function(){const orig=addTrackUI;return e=>{if(!can("multitrack")){openPlans("multitrack");return;}orig();};})();
+$("addTrackBtn").onclick=async()=>{
+  const hasContent=tracks.some(t=>t.stops && t.stops.some(s=>s.latlng)) || pois.length;
+  if(hasContent){
+    const logged = typeof fauth!=="undefined" && fauth && fauth.currentUser;
+    const msg = logged
+      ? "Utworzyć nową trasę jako osobny projekt?\n\nBieżąca zostanie automatycznie zapisana w Twojej chmurze."
+      : "Utworzyć nową trasę jako osobny projekt?\n\nBieżąca zostanie utracona (nie jesteś zalogowany, więc nie zapisze się w chmurze). Zaloguj się, żeby zapisywać w chmurze.";
+    if(!confirm(msg)) return;
+    if(logged){
+      try{
+        const data=serialize();
+        const id="track_"+Date.now();
+        await fdb.ref("users/"+fauth.currentUser.uid+"/projects/"+id).set({id,timestamp:Date.now(),name:data.name||"Bez nazwy",data});
+        toast("Zapisano poprzednią w chmurze ✓");
+        if(typeof loadCloudTracks==="function") loadCloudTracks();
+      }catch(e){
+        if(!confirm("Nie udało się zapisać w chmurze: "+(e.message||e)+"\n\nKontynuować bez zapisu?")) return;
+      }
+    }
+  }
+  clearAll();
+  $("projName").value="Nowa trasa";
+  try{ $("projName").focus(); $("projName").select(); }catch(e){}
+  toast("✏️ Nowy projekt — wpisz nazwę i klikaj mapę.");
+};
 try{const savedName=localStorage.getItem("planer_name");if(savedName&&$("liveName"))$("liveName").value=savedName;}catch(e){}
 loadFromHash();
 if(getRoom()&&FIREBASE_CONFIG.apiKey&&can("live"))startLive();
