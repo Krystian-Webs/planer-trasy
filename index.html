@@ -1497,9 +1497,10 @@ $("addTrackBtn").onclick=async()=>{
   const hasContent=tracks.some(t=>t.stops && t.stops.some(s=>s.latlng)) || pois.length;
   if(hasContent){
     const logged = typeof fauth!=="undefined" && fauth && fauth.currentUser;
+    const inRoom = /#room=/.test(location.hash||"");
     const msg = logged
-      ? "Utworzyć nową trasę jako osobny projekt?\n\nBieżąca zostanie automatycznie zapisana w Twojej chmurze."
-      : "Utworzyć nową trasę jako osobny projekt?\n\nBieżąca zostanie utracona (nie jesteś zalogowany, więc nie zapisze się w chmurze). Zaloguj się, żeby zapisywać w chmurze.";
+      ? "Utworzyć nową trasę jako osobny projekt?\n\nBieżąca zostanie automatycznie zapisana w Twojej chmurze."+(inRoom?"\n\n(Wyjdziesz z pokoju współpracy na żywo.)":"")
+      : "Utworzyć nową trasę jako osobny projekt?\n\nBieżąca zostanie utracona (nie jesteś zalogowany, więc nie zapisze się w chmurze). Zaloguj się, żeby zapisywać w chmurze."+(inRoom?"\n\n(Wyjdziesz z pokoju współpracy na żywo.)":"");
     if(!confirm(msg)) return;
     if(logged){
       try{
@@ -1507,16 +1508,18 @@ $("addTrackBtn").onclick=async()=>{
         const id="track_"+Date.now();
         await fdb.ref("users/"+fauth.currentUser.uid+"/projects/"+id).set({id,timestamp:Date.now(),name:data.name||"Bez nazwy",data});
         toast("Zapisano poprzednią w chmurze ✓");
-        if(typeof loadCloudTracks==="function") loadCloudTracks();
       }catch(e){
         if(!confirm("Nie udało się zapisać w chmurze: "+(e.message||e)+"\n\nKontynuować bez zapisu?")) return;
       }
     }
   }
-  clearAll();
-  $("projName").value="Nowa trasa";
-  try{ $("projName").focus(); $("projName").select(); }catch(e){}
-  toast("✏️ Nowy projekt — wpisz nazwę i klikaj mapę.");
+  // Wyczyść autozapis lokalny (żeby stary projekt nie wrócił po reloadzie)
+  try{ localStorage.removeItem("planer_autosave"); }catch(e){}
+  // Odetnij aktywne subskrypcje live (jeśli są) i przeładuj na czystą stronę bez #room / #view / #embed / #p
+  try{ if(typeof roomRef!=="undefined"&&roomRef) roomRef.off(); }catch(e){}
+  try{ if(typeof presRef!=="undefined"&&presRef) presRef.off(); }catch(e){}
+  try{ if(typeof myPresRef!=="undefined"&&myPresRef) myPresRef.remove(); }catch(e){}
+  location.assign(location.origin + location.pathname);
 };
 try{const savedName=localStorage.getItem("planer_name");if(savedName&&$("liveName"))$("liveName").value=savedName;}catch(e){}
 loadFromHash();
