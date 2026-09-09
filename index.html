@@ -331,6 +331,8 @@
     #embedInfo .ei-km{font-size:22px}
     #embedInfo .ei-streets{display:none}
   }
+  .leaflet-marker-icon.insert-cursor{filter:drop-shadow(0 0 12px #fbbf24) drop-shadow(0 0 6px #fbbf24) brightness(1.15);animation:insertCursorPulse 1s ease-in-out infinite;z-index:9999!important}
+  @keyframes insertCursorPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.15)}}
 </style>
 </head>
 <body>
@@ -675,7 +677,83 @@ window.addEventListener("resize",acHide);
 document.addEventListener("mousedown",e=>{if(acInput&&e.target!==acInput&&!$("acFloat").contains(e.target))acHide();});
 
 function stopLabel(i){if(stops.length<=1||i===0)return["Start","#33c27a"];if(i===stops.length-1)return["Meta","#eef3f8"];return["Przystanek "+i,"#ff6b1a"];}
-function makeStopMarker(s){s.marker=L.marker(s.latlng,{draggable:true}).addTo(map);s.marker.on("dragend",async()=>{s.latlng=s.marker.getLatLng();s.address=await reverseGeocode(s.latlng);renderStops();rebuildRoute();});s.marker.on("click",()=>{const idx=stops.indexOf(s);const lab=stopLabel(idx)[0];const div=document.createElement("div");div.style.cssText="min-width:130px;text-align:center";div.innerHTML=`<div style="font:600 13px sans-serif;margin-bottom:8px">${lab}</div>`;const b=document.createElement("button");b.textContent="✕ Usuń ten punkt";b.style.cssText="background:#e23b4e;color:#fff;border:none;border-radius:8px;padding:8px 10px;font:600 12px sans-serif;cursor:pointer;width:100%";b.onclick=()=>{map.closePopup();removeStop(s.id);toast("Usunięto punkt — trasa przeliczona.");};div.appendChild(b);s.marker.bindPopup(div).openPopup();});}
+let insertAfterStopId=null;
+function makeStopMarker(s){
+  s.marker=L.marker(s.latlng,{draggable:true}).addTo(map);
+  s.marker.on("dragend",async()=>{
+    s.latlng=s.marker.getLatLng();
+    s.address=await reverseGeocode(s.latlng);
+    renderStops();
+    rebuildRoute();
+  });
+  s.marker.on("click",()=>{
+    const idx=stops.indexOf(s);
+    const lab=stopLabel(idx)[0];
+    const div=document.createElement("div");
+    div.style.cssText="min-width:180px;text-align:center";
+    div.innerHTML=`<div style="font:600 13px sans-serif;margin-bottom:10px">${lab}</div>`;
+    const btnStyle="border:none;border-radius:8px;padding:8px 10px;font:600 12px sans-serif;cursor:pointer;width:100%;margin-bottom:6px";
+    // Wstaw punkt po tym
+    const bInsert=document.createElement("button");
+    bInsert.textContent="📍 Wstaw punkt po tym";
+    bInsert.style.cssText=btnStyle+";background:#fbbf24;color:#0a0e13";
+    bInsert.onclick=()=>{
+      map.closePopup();
+      insertAfterStopId=s.id;
+      highlightInsertCursor();
+      toast("📍 Zaznaczono „"+lab+"”. Klik na mapie wstawi PO tym punkcie. ESC = anuluj.");
+    };
+    div.appendChild(bInsert);
+    // Zawróć od tego punktu (dla tras out-and-back)
+    const bReturn=document.createElement("button");
+    bReturn.textContent="↩️ Zawróć od tego punktu";
+    bReturn.style.cssText=btnStyle+";background:#3b82f6;color:#fff";
+    bReturn.onclick=async()=>{
+      map.closePopup();
+      const validStops=stops.filter(x=>x.latlng);
+      const myIdx=validStops.findIndex(x=>x.id===s.id);
+      if(myIdx<1){ toast("Nie da się zawrócić — to pierwszy punkt trasy."); return; }
+      // Dodaj waypointy od myIdx-1 do 0 (kolejność odwrotna) na koniec listy
+      for(let i=myIdx-1;i>=0;i--){
+        const src=validStops[i];
+        const ns={id:idSeq++,latlng:L.latLng(src.latlng.lat,src.latlng.lng),address:src.address||"",marker:null};
+        stops.push(ns);
+        makeStopMarker(ns);
+      }
+      renderStops();
+      rebuildRoute();
+      toast("↩️ Dodano powrót — trasa jedzie do „"+lab+"” i wraca do startu.");
+    };
+    div.appendChild(bReturn);
+    // Usuń
+    const bDel=document.createElement("button");
+    bDel.textContent="✕ Usuń ten punkt";
+    bDel.style.cssText=btnStyle+";background:#e23b4e;color:#fff;margin-bottom:0";
+    bDel.onclick=()=>{
+      map.closePopup();
+      removeStop(s.id);
+      toast("Usunięto punkt — trasa przeliczona.");
+    };
+    div.appendChild(bDel);
+    s.marker.bindPopup(div).openPopup();
+  });
+}
+function highlightInsertCursor(){
+  stops.forEach(s=>{
+    if(!s.marker) return;
+    const el=s.marker.getElement();
+    if(!el) return;
+    if(s.id===insertAfterStopId) el.classList.add("insert-cursor");
+    else el.classList.remove("insert-cursor");
+  });
+}
+document.addEventListener("keydown",e=>{
+  if(e.key==="Escape" && insertAfterStopId!==null){
+    insertAfterStopId=null;
+    highlightInsertCursor();
+    toast("Anulowano zaznaczenie punktu wstawiania.");
+  }
+});
 function addStop(latlng,address,silent){const s={id:idSeq++,latlng:latlng||null,address:address||"",marker:null};if(s.latlng)makeStopMarker(s);stops.push(s);if(!silent){renderStops();rebuildRoute();}return s;}
 function removeStop(id){const s=stops.find(x=>x.id===id);if(s&&s.marker)map.removeLayer(s.marker);stops=stops.filter(x=>x.id!==id);if(activeTrack)activeTrack.stops=stops;renderStops();rebuildRoute();}
 function renumberStops(){let n=0;stops.forEach(s=>{if(s.marker){n++;s.marker.setIcon(waypointIcon(n));}});}
@@ -686,7 +764,39 @@ function moveStop(i,dir){const j=i+dir;if(j<0||j>=stops.length)return;const t=st
 function renderTrackList(){const wrap=$("trackList");if(!wrap)return;wrap.innerHTML="";tracks.forEach(t=>{const isAct=activeTrack&&t.id===activeTrack.id;const row=document.createElement("div");row.className="trackrow"+(isAct?" act":"");const km=(t.meters/1000).toFixed(2).replace(".",",");row.innerHTML=`<span class="dotc" style="background:${t.color};cursor:pointer;width:12px;height:12px;border-radius:50%;flex:none;margin-left:4px"></span><input class="tname fld" value="${(t.name||"").replace(/"/g,"&quot;")}" style="flex:1;min-width:0"><span class="tkm" style="font-size:12px;color:#8fa0b0;white-space:nowrap">${km} km</span>`;const nameInp=row.querySelector(".tname");nameInp.onchange=()=>{t.name=nameInp.value;};nameInp.onclick=e=>e.stopPropagation();const actBtn=document.createElement("button");actBtn.className="mv";actBtn.textContent=isAct?"✏️":"✎";actBtn.title=isAct?"Edytujesz tę trasę":"Edytuj tę trasę";actBtn.onclick=e=>{e.stopPropagation();setActiveTrack(t.id);};row.appendChild(actBtn);if(tracks.length>1){const delBtn=document.createElement("button");delBtn.className="rm";delBtn.textContent="✕";delBtn.title="Usuń trasę";delBtn.onclick=e=>{e.stopPropagation();removeTrack(t.id);};row.appendChild(delBtn);}row.querySelector(".dotc").onclick=()=>setActiveTrack(t.id);wrap.appendChild(row);});}
 function addTrackUI(){const t=newTrack();setActiveTrack(t.id);setMode("route");toast("✏️ Nowa trasa („"+t.name+"”) — klikaj mapę, żeby ją rysować.");}
 function removeTrack(id){if(tracks.length<=1){toast("To jedyna trasa.");return;}const t=tracks.find(x=>x.id===id);if(!t)return;if(t.line)map.removeLayer(t.line);t.stops.forEach(s=>{if(s.marker)map.removeLayer(s.marker);});const wasActive=activeTrack&&activeTrack.id===id;tracks=tracks.filter(x=>x.id!==id);if(wasActive){activeTrack=null;setActiveTrack(tracks[0].id);}else{renderTrackList();}toast("Usunięto trasę.");}
-async function placeRouteStop(latlng,address){ensureEndpoints();let s;if(!stops[0].latlng)s=stops[0];else if(!stops[stops.length-1].latlng)s=stops[stops.length-1];else{s={id:idSeq++,latlng:null,address:"",marker:null};stops.push(s);}s.latlng=latlng;if(s.marker)s.marker.setLatLng(latlng);else makeStopMarker(s);s.address=address||await reverseGeocode(latlng);renderStops();rebuildRoute();}
+async function placeRouteStop(latlng,address){
+  // Jeśli mamy zaznaczony punkt do wstawienia PO — użyj go
+  if(insertAfterStopId!==null){
+    const idx=stops.findIndex(s=>s.id===insertAfterStopId);
+    if(idx>=0){
+      const ns={id:idSeq++,latlng,address:"",marker:null};
+      stops.splice(idx+1,0,ns);
+      makeStopMarker(ns);
+      ns.address=address||await reverseGeocode(latlng);
+      insertAfterStopId=null;
+      highlightInsertCursor();
+      renderStops();
+      rebuildRoute();
+      toast("📍 Wstawiono nowy punkt.");
+      return;
+    }
+    // Nie znaleziono targetu (usunięty w międzyczasie) — resetuj
+    insertAfterStopId=null;
+    highlightInsertCursor();
+  }
+  // Zwykłe dodanie na końcu
+  ensureEndpoints();
+  let s;
+  if(!stops[0].latlng) s=stops[0];
+  else if(!stops[stops.length-1].latlng) s=stops[stops.length-1];
+  else { s={id:idSeq++,latlng:null,address:"",marker:null}; stops.push(s); }
+  s.latlng=latlng;
+  if(s.marker) s.marker.setLatLng(latlng);
+  else makeStopMarker(s);
+  s.address=address||await reverseGeocode(latlng);
+  renderStops();
+  rebuildRoute();
+}
 
 async function fetchRoute(coords){
   const pairs=coords.map(c=>`${c.lng},${c.lat}`).join(";");
@@ -789,7 +899,7 @@ $("collapseBtn").onclick=()=>{const p=$("panel");p.classList.toggle("collapsed")
 $("grabBar").onclick=()=>$("collapseBtn").onclick();
 
 const sInput=$("searchInput"),sDrop=$("searchResults"),sInfo=$("searchInfo"),sSpin=$("searchSpin");
-function searchInfoText(){sInfo.innerHTML=(mode==="route"?"🟧 mapa = nowy punkt · <b>linia</b> = wstaw pomiędzy · <b>pinezka</b> = usuń":"Wybierz typ, potem dotknij/kliknij mapę: "+POI[poiType].ic+" "+POI[poiType].label);}
+function searchInfoText(){sInfo.innerHTML=(mode==="route"?"🟧 mapa = nowy punkt · <b>linia</b> = wstaw pomiędzy · <b>pinezka</b> = menu (wstaw / zawróć / usuń)":"Wybierz typ, potem dotknij/kliknij mapę: "+POI[poiType].ic+" "+POI[poiType].label);}
 function setMode(m){mode=m;document.querySelectorAll("#modeSeg button").forEach(b=>b.classList.toggle("on",b.dataset.m===m));searchInfoText();}
 $("modeSeg").addEventListener("click",e=>{const b=e.target.closest("button");if(b)setMode(b.dataset.m);});
 let sTimer=null;
@@ -1612,37 +1722,34 @@ $("addTrackBtn").onclick=async()=>{
   const hasContent=tracks.some(t=>t.stops && t.stops.some(s=>s.latlng)) || pois.length;
   const inRoom = /#room=/.test(location.hash||"");
   const logged = typeof fauth!=="undefined" && fauth && fauth.currentUser;
+  const savedWhere=[];
   if(hasContent){
-    let saveLines="Bieżąca trasa zostanie automatycznie zapisana:\n• lokalnie w tej przeglądarce (zawsze)";
-    if(logged) saveLines+="\n• w Twojej chmurze (bo jesteś zalogowany)";
-    const msg="Utworzyć nową trasę jako osobny projekt?\n\n"+saveLines+(inRoom?"\n\n(Wyjdziesz z pokoju współpracy na żywo.)":"");
-    if(!confirm(msg)) return;
-    // Zawsze lokalnie (nie wymaga loginu)
-    try{ saveCurrentLocal(true); }catch(e){ console.warn("Local save:",e); }
-    // Dodatkowo w chmurze jeśli zalogowany
+    if(!confirm("Utworzyć nową trasę od zera?\n\nBieżąca zostanie automatycznie zapisana"+(logged?" w chmurze i lokalnie.":" lokalnie w tej przeglądarce.")+(inRoom?"\n(Wyjdziesz z pokoju współpracy.)":""))) return;
+    // Auto-save lokalnie (zawsze)
+    try{ if(saveCurrentLocal(true)) savedWhere.push("lokalnie"); }catch(e){ console.warn("Local:",e); }
+    // Auto-save w chmurze (jeśli zalogowany)
     if(logged){
       try{
         const data=serialize();
         const id="track_"+Date.now();
         await fdb.ref("users/"+fauth.currentUser.uid+"/projects/"+id).set({id,timestamp:Date.now(),name:data.name||"Bez nazwy",data});
-        toast("Zapisano też w chmurze ✓");
-      }catch(e){ console.warn("Cloud save:",e); }
+        savedWhere.push("w chmurze");
+      }catch(e){ console.warn("Cloud:",e); }
     }
   }
+  // ZAWSZE twardy reload na czysty URL — gwarantuje 100% świeży stan (bez stale cache/state)
+  try{ localStorage.removeItem("planer_autosave"); }catch(e){}
   if(inRoom){
-    // W pokoju live musimy przeładować, żeby wyjść (inaczej Firebase nadpisze)
-    try{ localStorage.removeItem("planer_autosave"); }catch(e){}
     try{ if(typeof roomRef!=="undefined"&&roomRef) roomRef.off(); }catch(e){}
     try{ if(typeof presRef!=="undefined"&&presRef) presRef.off(); }catch(e){}
     try{ if(typeof myPresRef!=="undefined"&&myPresRef) myPresRef.remove(); }catch(e){}
-    location.assign(location.origin + location.pathname);
-    return;
   }
-  // Poza pokojem: po prostu wyczyść lokalnie, bez reloadu
-  clearAll();
-  $("projName").value="Nowa trasa";
-  try{ $("projName").focus(); $("projName").select(); }catch(e){}
-  toast("✏️ Nowy projekt — poprzedni jest w sekcji Projekty lokalne.");
+  if(savedWhere.length){
+    try{ sessionStorage.setItem("planer_flash","✓ Zapisano poprzednią "+savedWhere.join(" i ")+". Zaczynaj nową!"); }catch(e){}
+  } else {
+    try{ sessionStorage.setItem("planer_flash","✏️ Świeży projekt — klikaj mapę."); }catch(e){}
+  }
+  location.assign(location.origin + location.pathname);
 };
 
 // ========== PROJEKTY LOKALNE (bez logowania, localStorage) ==========
@@ -1703,6 +1810,11 @@ function deleteLocalProjectById(id, name){
 $("saveLocalBtn").onclick=()=>saveCurrentLocal(false);
 // Pierwszy render po chwili (żeby DOM był gotowy)
 setTimeout(renderLocalProjects, 200);
+// Flash message po reloadzie z "+ Nowa trasa"
+try{
+  const flash=sessionStorage.getItem("planer_flash");
+  if(flash){ sessionStorage.removeItem("planer_flash"); setTimeout(()=>toast(flash), 700); }
+}catch(e){}
 try{const savedName=localStorage.getItem("planer_name");if(savedName&&$("liveName"))$("liveName").value=savedName;}catch(e){}
 loadFromHash();
 if(getRoom()&&FIREBASE_CONFIG.apiKey&&can("live"))startLive();
