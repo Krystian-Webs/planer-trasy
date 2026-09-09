@@ -268,6 +268,9 @@
   /* Bazowa linia trasy ukryta — widać tylko rysowany za pinezką ślad */
   body.embed-mode .leaflet-overlay-pane,
   body.viewer-mode .leaflet-overlay-pane{opacity:0!important}
+  /* GWARANCJA: w trybie edytora linia zawsze widoczna (przeciwdziała zaciętym klasom w cache) */
+  body:not(.embed-mode):not(.viewer-mode) .leaflet-overlay-pane{opacity:1!important}
+  body:not(.embed-mode):not(.viewer-mode) .leaflet-marker-pane{display:block!important}
   /* pulsing dot marker */
   .anim-marker{width:26px;height:26px;border-radius:50%;background:#ff6b1a;border:3px solid #fff;box-shadow:0 0 0 8px rgba(255,107,26,.28),0 3px 12px rgba(0,0,0,.5);animation:animPulse 1.2s ease-in-out infinite}
   @keyframes animPulse{0%,100%{box-shadow:0 0 0 8px rgba(255,107,26,.28),0 3px 12px rgba(0,0,0,.5)}50%{box-shadow:0 0 0 14px rgba(255,107,26,.14),0 3px 12px rgba(0,0,0,.5)}}
@@ -2171,6 +2174,9 @@ async function activateViewerModeIfNeeded(){
   const h=location.hash||"";
   if(h.startsWith("#view=") || h.startsWith("#embed=")){
     setTimeout(activateViewerModeIfNeeded, 100);
+  } else {
+    // Edytor: usuń klasy prezentacji jeśli zostały z poprzedniej sesji (przeciwdziała bugowi z niewidoczną trasą)
+    document.body.classList.remove("viewer-mode","embed-mode");
   }
 })();
 
