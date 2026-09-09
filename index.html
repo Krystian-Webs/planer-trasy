@@ -823,41 +823,68 @@ let _rebuildGen=0;
 async function rebuildRoute(){
   const myGen=++_rebuildGen;
   let localGeom=[]; let localMeters=0;
-  const coords=stops.filter(s=>s && s.latlng && typeof s.latlng.lat==="number" && typeof s.latlng.lng==="number").map(s=>s.latlng);
-  if(coords.length>=2){
-    if(snap){
-      try{
-        const res=await fetchRoute(coords);
-        if(res && res.geometry && Array.isArray(res.geometry) && res.geometry.length>=2){
-          localGeom=res.geometry;
-          localMeters=res.meters||0;
-        }
-      }catch(e){ console.warn("fetchRoute:",e); }
-    }
-    // Absolutny fallback: jak routing nie zwrócił nic dobrego → proste linie + haversine
-    if(localGeom.length<2){
-      localGeom=coords.map(c=>[c.lat,c.lng]);
-      localMeters=0;
-      for(let i=1;i<coords.length;i++){
-        const d=haversine(coords[i-1],coords[i]);
-        if(isFinite(d)) localMeters+=d;
+  try{
+    const coords=stops.filter(s=>s && s.latlng && typeof s.latlng.lat==="number" && typeof s.latlng.lng==="number" && isFinite(s.latlng.lat) && isFinite(s.latlng.lng)).map(s=>s.latlng);
+    console.log("[rebuild#"+myGen+"] stops="+stops.length+" valid="+coords.length+" snap="+snap+" activeTrack="+(activeTrack?activeTrack.id+"/"+activeTrack.name:"NULL"));
+    if(coords.length>=2){
+      if(snap){
+        try{
+          const res=await fetchRoute(coords);
+          console.log("[rebuild#"+myGen+"] fetchRoute: "+(res?"OK "+res.meters+"m/"+(res.geometry&&res.geometry.length)+"pts":"NULL"));
+          if(res && res.geometry && Array.isArray(res.geometry) && res.geometry.length>=2){
+            localGeom=res.geometry;
+            localMeters=res.meters||0;
+          }
+        }catch(e){ console.warn("[rebuild#"+myGen+"] fetch error:",e); }
       }
+      // Absolutny fallback: proste linie + haversine (zawsze zadziała jeśli mamy 2+ punkty)
+      if(localGeom.length<2){
+        console.log("[rebuild#"+myGen+"] fallback: straight-line");
+        localGeom=coords.map(c=>[c.lat,c.lng]);
+        localMeters=0;
+        for(let i=1;i<coords.length;i++){
+          const d=haversine(coords[i-1],coords[i]);
+          if(isFinite(d)) localMeters+=d;
+        }
+      }
+    } else if(coords.length===1){
+      localGeom=[[coords[0].lat,coords[0].lng]];
     }
-  } else if(coords.length===1){
-    localGeom=[[coords[0].lat,coords[0].lng]];
+    if(myGen!==_rebuildGen){ console.log("[rebuild#"+myGen+"] ABANDONED (newer gen)"); return; }
+    lastGeometry=localGeom; totalMeters=localMeters;
+    console.log("[rebuild#"+myGen+"] lastGeometry.length="+lastGeometry.length+" totalMeters="+Math.round(totalMeters));
+    if(!activeTrack){
+      console.warn("[rebuild#"+myGen+"] NO ACTIVE TRACK! Creating one.");
+      activeTrack=newTrack();
+      stops=activeTrack.stops;
+    }
+    syncActive();
+    redrawAllTrackLines();
+    const drawn=(activeTrack&&activeTrack.line)?"YES":"NO";
+    console.log("[rebuild#"+myGen+"] active track line drawn: "+drawn);
+    if(coords.length>=2 && drawn==="NO"){
+      toast("⚠️ Mam "+coords.length+" punktów ale linia się nie narysowała. Otwórz konsolę (F12) i wyślij screena.");
+    }
+    routeLine=activeTrack?activeTrack.line:null;
+    drawKmMarkers();
+    renderPoiList();
+    updateStats();
+    updateTarget();
+    renderTrackList();
+  }catch(err){
+    console.error("[rebuild#"+myGen+"] EXCEPTION:",err);
+    toast("❌ Błąd budowy trasy: "+(err && err.message ? err.message : String(err)));
   }
-  // Nowszy rebuild już wystartował — porzuć wynik
-  if(myGen!==_rebuildGen) return;
-  lastGeometry=localGeom; totalMeters=localMeters;
-  syncActive();
-  redrawAllTrackLines();
-  routeLine=activeTrack?activeTrack.line:null;
-  drawKmMarkers();
-  renderPoiList();
-  updateStats();
-  updateTarget();
-  renderTrackList();
 }
+// Globalny łapacz błędów — pokazuje je jako toast (żebyśmy widzieli co się dzieje bez F12)
+window.addEventListener("error",e=>{
+  console.error("Global error:",e.error||e.message);
+  try{ toast("❌ JS: "+(e.message||"nieznany błąd").slice(0,100)); }catch(_){}
+});
+window.addEventListener("unhandledrejection",e=>{
+  console.error("Unhandled promise:",e.reason);
+  try{ toast("❌ Async: "+String(e.reason||"nieznany").slice(0,100)); }catch(_){}
+});
 async function insertStopOnLine(latlng){
   const k=kmAlong(latlng);if(k==null){placeRouteStop(latlng);return;}
   let insertIdx=-1;
