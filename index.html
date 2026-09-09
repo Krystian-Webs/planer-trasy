@@ -360,10 +360,16 @@
         <button class="btn primary" id="saveToCloudBtn">💾 Zapisz obecną trasę w chmurze</button>
         <p class="hint">Trasy z chmury są przypisane do Twojego konta i widoczne z każdego urządzenia po zalogowaniu.</p>
       </div>
+      <div class="group" id="localRoutesGroup">
+        <div class="lbl" style="color:var(--accent-2)">💾 Twoje projekty lokalne</div>
+        <div id="localTracksList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px;max-height:220px;overflow-y:auto"></div>
+        <button class="btn primary" id="saveLocalBtn">💾 Zapisz bieżącą trasę lokalnie</button>
+        <p class="hint">Bez logowania — trasy zostają w tej przeglądarce, na tym urządzeniu. Możesz mieć dowolnie wiele projektów obok siebie, każdy ma osobny link embed, plik GPX i film. „＋ Nowa trasa" automatycznie tu zapisuje bieżącą.</p>
+      </div>
       <div class="group" id="loginPromptGroup" style="display:none">
         <div class="lbl">Twoje konto</div>
         <button class="btn primary" id="loginPromptBtn">🔐 Zaloguj się, by zapisywać w chmurze</button>
-        <p class="hint">Bez logowania aplikacja działa normalnie i zapisuje ostatni projekt lokalnie. Zalogowanie daje dostęp do Twoich tras z każdego urządzenia.</p>
+        <p class="hint">Bez logowania aplikacja działa normalnie (patrz „Projekty lokalne" wyżej). Zalogowanie daje dostęp do Twoich tras z każdego urządzenia.</p>
       </div>
       <div class="group">
         <div class="lbl">Konto i plan</div>
@@ -1563,32 +1569,99 @@ renderStops();updateStats();searchInfoText();
 $("fitBtn").onclick=fitToRoute;
 $("addTrackBtn").onclick=async()=>{
   const hasContent=tracks.some(t=>t.stops && t.stops.some(s=>s.latlng)) || pois.length;
+  const inRoom = /#room=/.test(location.hash||"");
+  const logged = typeof fauth!=="undefined" && fauth && fauth.currentUser;
   if(hasContent){
-    const logged = typeof fauth!=="undefined" && fauth && fauth.currentUser;
-    const inRoom = /#room=/.test(location.hash||"");
-    const msg = logged
-      ? "Utworzyć nową trasę jako osobny projekt?\n\nBieżąca zostanie automatycznie zapisana w Twojej chmurze."+(inRoom?"\n\n(Wyjdziesz z pokoju współpracy na żywo.)":"")
-      : "Utworzyć nową trasę jako osobny projekt?\n\nBieżąca zostanie utracona (nie jesteś zalogowany, więc nie zapisze się w chmurze). Zaloguj się, żeby zapisywać w chmurze."+(inRoom?"\n\n(Wyjdziesz z pokoju współpracy na żywo.)":"");
+    let saveLines="Bieżąca trasa zostanie automatycznie zapisana:\n• lokalnie w tej przeglądarce (zawsze)";
+    if(logged) saveLines+="\n• w Twojej chmurze (bo jesteś zalogowany)";
+    const msg="Utworzyć nową trasę jako osobny projekt?\n\n"+saveLines+(inRoom?"\n\n(Wyjdziesz z pokoju współpracy na żywo.)":"");
     if(!confirm(msg)) return;
+    // Zawsze lokalnie (nie wymaga loginu)
+    try{ saveCurrentLocal(true); }catch(e){ console.warn("Local save:",e); }
+    // Dodatkowo w chmurze jeśli zalogowany
     if(logged){
       try{
         const data=serialize();
         const id="track_"+Date.now();
         await fdb.ref("users/"+fauth.currentUser.uid+"/projects/"+id).set({id,timestamp:Date.now(),name:data.name||"Bez nazwy",data});
-        toast("Zapisano poprzednią w chmurze ✓");
-      }catch(e){
-        if(!confirm("Nie udało się zapisać w chmurze: "+(e.message||e)+"\n\nKontynuować bez zapisu?")) return;
-      }
+        toast("Zapisano też w chmurze ✓");
+      }catch(e){ console.warn("Cloud save:",e); }
     }
   }
-  // Wyczyść autozapis lokalny (żeby stary projekt nie wrócił po reloadzie)
-  try{ localStorage.removeItem("planer_autosave"); }catch(e){}
-  // Odetnij aktywne subskrypcje live (jeśli są) i przeładuj na czystą stronę bez #room / #view / #embed / #p
-  try{ if(typeof roomRef!=="undefined"&&roomRef) roomRef.off(); }catch(e){}
-  try{ if(typeof presRef!=="undefined"&&presRef) presRef.off(); }catch(e){}
-  try{ if(typeof myPresRef!=="undefined"&&myPresRef) myPresRef.remove(); }catch(e){}
-  location.assign(location.origin + location.pathname);
+  if(inRoom){
+    // W pokoju live musimy przeładować, żeby wyjść (inaczej Firebase nadpisze)
+    try{ localStorage.removeItem("planer_autosave"); }catch(e){}
+    try{ if(typeof roomRef!=="undefined"&&roomRef) roomRef.off(); }catch(e){}
+    try{ if(typeof presRef!=="undefined"&&presRef) presRef.off(); }catch(e){}
+    try{ if(typeof myPresRef!=="undefined"&&myPresRef) myPresRef.remove(); }catch(e){}
+    location.assign(location.origin + location.pathname);
+    return;
+  }
+  // Poza pokojem: po prostu wyczyść lokalnie, bez reloadu
+  clearAll();
+  $("projName").value="Nowa trasa";
+  try{ $("projName").focus(); $("projName").select(); }catch(e){}
+  toast("✏️ Nowy projekt — poprzedni jest w sekcji Projekty lokalne.");
 };
+
+// ========== PROJEKTY LOKALNE (bez logowania, localStorage) ==========
+const LOCAL_PROJECTS_KEY="planer_local_projects";
+function getLocalProjects(){
+  try{ const raw=localStorage.getItem(LOCAL_PROJECTS_KEY); return raw?JSON.parse(raw):[]; }catch(e){ return []; }
+}
+function setLocalProjectsRaw(arr){
+  try{ localStorage.setItem(LOCAL_PROJECTS_KEY, JSON.stringify(arr)); return true; }
+  catch(e){ toast("Za mało miejsca w przeglądarce. Usuń stare trasy lokalne."); return false; }
+}
+function saveCurrentLocal(silent){
+  const data=serialize();
+  const hasContent=(data.tracks||[]).some(t=>(t.stops||[]).length>=1) || (data.pois||[]).length;
+  if(!hasContent){ if(!silent) toast("Nic do zapisania — trasa jest pusta."); return false; }
+  const list=getLocalProjects();
+  const id="local_"+Date.now()+"_"+Math.random().toString(36).slice(2,7);
+  list.unshift({id, timestamp:Date.now(), name:data.name||"Bez nazwy", data});
+  if(list.length>30) list.length=30;
+  if(setLocalProjectsRaw(list)){
+    if(!silent) toast("Zapisano lokalnie ✓");
+    renderLocalProjects();
+    return true;
+  }
+  return false;
+}
+function renderLocalProjects(){
+  const box=$("localTracksList"); if(!box) return;
+  const list=getLocalProjects();
+  if(!list.length){ box.innerHTML='<div class="empty">Jeszcze nie masz projektów lokalnych. Kliknij „Zapisz bieżącą trasę lokalnie".</div>'; return; }
+  box.innerHTML="";
+  list.forEach(p=>{
+    const dt=p.timestamp? new Date(p.timestamp).toLocaleString("pl-PL",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}):"";
+    const el=document.createElement("div"); el.className="cloud-row";
+    el.innerHTML=`<div style="flex:1;min-width:0"><div class="cname">📍 ${(p.name||"Bez nazwy").replace(/</g,"&lt;")}</div><div class="cmeta">${dt}</div></div>`;
+    const btnL=document.createElement("button"); btnL.textContent="Wczytaj"; btnL.onclick=()=>loadLocalProjectById(p.id);
+    const btnD=document.createElement("button"); btnD.className="del"; btnD.textContent="✕"; btnD.onclick=()=>deleteLocalProjectById(p.id, p.name);
+    el.appendChild(btnL); el.appendChild(btnD); box.appendChild(el);
+  });
+}
+async function loadLocalProjectById(id){
+  const p=getLocalProjects().find(x=>x.id===id);
+  if(!p){ toast("Nie znaleziono."); return; }
+  const hasContent=tracks.some(t=>t.stops && t.stops.some(s=>s.latlng)) || pois.length;
+  if(hasContent){
+    if(!confirm("Wczytać „"+(p.name||"Bez nazwy")+"”?\nBieżąca trasa zostanie zamknięta (zapisz ją najpierw jeśli chcesz zachować).")) return;
+  }
+  await loadProject(p.data);
+  toast("Wczytano „"+(p.name||"Bez nazwy")+"” ✓");
+}
+function deleteLocalProjectById(id, name){
+  if(!confirm('Usunąć „'+(name||"Bez nazwy")+'” z projektów lokalnych?\nTej operacji nie da się cofnąć.')) return;
+  const list=getLocalProjects().filter(p=>p.id!==id);
+  setLocalProjectsRaw(list);
+  renderLocalProjects();
+  toast("Usunięto.");
+}
+$("saveLocalBtn").onclick=()=>saveCurrentLocal(false);
+// Pierwszy render po chwili (żeby DOM był gotowy)
+setTimeout(renderLocalProjects, 200);
 try{const savedName=localStorage.getItem("planer_name");if(savedName&&$("liveName"))$("liveName").value=savedName;}catch(e){}
 loadFromHash();
 if(getRoom()&&FIREBASE_CONFIG.apiKey&&can("live"))startLive();
