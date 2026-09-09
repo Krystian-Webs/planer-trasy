@@ -288,8 +288,8 @@
   /* Nagłówek FOR RUN — centralnie u góry */
   #embedHeader{display:none;position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:1500;background:rgba(10,14,19,.92);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);padding:8px 20px;border-radius:14px;border:1px solid var(--line-soft);box-shadow:0 6px 24px rgba(0,0,0,.5);text-align:center}
   body.embed-mode #embedHeader{display:block}
-  #embedHeader .brand{font:900 16px var(--font);color:#fbbf24;letter-spacing:4px;line-height:1}
-  #embedHeader .subtitle{font:500 11px var(--font);color:#8fa0b0;margin-top:4px;letter-spacing:1.2px;text-transform:uppercase;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #embedHeader .brand{display:block;height:36px;width:auto;max-width:200px;object-fit:contain;margin:0 auto}
+  #embedHeader .subtitle{font:500 11px var(--font);color:#8fa0b0;margin-top:6px;letter-spacing:1.2px;text-transform:uppercase;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   /* Licznik w prawym rogu — żółte cyfry */
   #embedStats{display:none;position:fixed;top:14px;right:14px;z-index:1500;background:rgba(10,14,19,.92);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);padding:12px 16px;border-radius:12px;border:1px solid var(--line-soft);box-shadow:0 8px 24px rgba(0,0,0,.55);min-width:140px}
   body.embed-mode #embedStats{display:block}
@@ -548,7 +548,7 @@
   <button id="viewerPlayBtn">▶ Odtwórz trasę</button>
   <div id="embedTitle">Trasa</div>
   <div id="embedHeader">
-    <div class="brand">FOR RUN</div>
+    <img class="brand" id="brandLogo" src="https://fortrun.pl/wp-content/uploads/2026/07/Projekt-bez-nazwy-97.png" alt="For Run">
     <div class="subtitle" id="embedSubtitle">Trasa</div>
   </div>
   <div id="embedStats">
@@ -1789,6 +1789,9 @@ async function exportRouteVideo(){
     if(!rendered){ toast("Nie mogę wyrenderować mapy."); return; }
     btn.textContent="⏳ Pobieram wysokości…";
     const elev=await fetchElevationStats().catch(()=>null);
+    // Spróbuj wczytać logo (może się nie udać z powodu CORS — wtedy fallback do tekstu)
+    btn.textContent="⏳ Wczytuję logo…";
+    const logoImg=await pngLoadImg("https://fortrun.pl/wp-content/uploads/2026/07/Projekt-bez-nazwy-97.png").catch(()=>null);
     btn.textContent="🎥 Renderuję film…";
     const {canvas:mapCanvas, toXY}=rendered;
     const {path,total}=animBuildFullPath();
@@ -1819,13 +1822,30 @@ async function exportRouteVideo(){
       ctx.fillStyle="#050810"; ctx.fillRect(0,0,CW,HEADER_H);
       // Cienki pasek żółty na dole headera
       ctx.fillStyle="#fbbf24"; ctx.fillRect(0,HEADER_H-3,CW,3);
-      ctx.fillStyle="#fbbf24"; ctx.textAlign="center"; ctx.textBaseline="middle";
-      ctx.font="900 76px 'Space Grotesk', system-ui, sans-serif";
-      try{ ctx.letterSpacing="10px"; }catch(e){}
-      ctx.fillText("FOR RUN", CW/2, 90);
-      try{ ctx.letterSpacing="0"; }catch(e){}
+      // Logo (obrazek) albo tekst-fallback
+      if(logoImg && logoImg.naturalWidth>0){
+        const targetH=90;
+        const ratio=logoImg.naturalWidth/logoImg.naturalHeight;
+        const w=Math.min(CW-80, targetH*ratio);
+        const h=w/ratio;
+        try{ ctx.drawImage(logoImg, (CW-w)/2, 40, w, h); }catch(e){
+          // Canvas tainted → nagrać się nie da; rysujemy tekst
+          ctx.fillStyle="#fbbf24"; ctx.textAlign="center"; ctx.textBaseline="middle";
+          ctx.font="900 76px 'Space Grotesk', system-ui, sans-serif";
+          try{ ctx.letterSpacing="10px"; }catch(_){}
+          ctx.fillText("FOR RUN", CW/2, 90);
+          try{ ctx.letterSpacing="0"; }catch(_){}
+        }
+      } else {
+        ctx.fillStyle="#fbbf24"; ctx.textAlign="center"; ctx.textBaseline="middle";
+        ctx.font="900 76px 'Space Grotesk', system-ui, sans-serif";
+        try{ ctx.letterSpacing="10px"; }catch(e){}
+        ctx.fillText("FOR RUN", CW/2, 90);
+        try{ ctx.letterSpacing="0"; }catch(e){}
+      }
       ctx.font="600 28px 'Space Grotesk', system-ui, sans-serif";
       ctx.fillStyle="#8fa0b0";
+      ctx.textAlign="center"; ctx.textBaseline="middle";
       try{ ctx.letterSpacing="3px"; }catch(e){}
       ctx.fillText(projName.toUpperCase().slice(0,40), CW/2, 158);
       try{ ctx.letterSpacing="0"; }catch(e){}
