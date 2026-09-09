@@ -994,7 +994,6 @@ async function gatherStreetNames(){
       }catch(e){}
     }
     if(!got){
-      // Fallback: reverse-geocode pierwszy punkt trasy przez Nominatim
       try{
         const p=pts[0];
         const r=await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${p.lat}&lon=${p.lng}&zoom=17&addressdetails=1`,{headers:{"Accept-Language":"pl"}});
@@ -1003,6 +1002,62 @@ async function gatherStreetNames(){
     }
   }
   return ordered;
+}
+
+// Zbiera segmenty ulic z zakresem dystansu (do pokazywania „aktualnej" ulicy pod pinezką)
+async function gatherStreetSegments(){
+  const segments=[]; let cumTotal=0;
+  for(const t of tracks){
+    const pts=t.stops.filter(s=>s.latlng).map(s=>s.latlng);
+    if(pts.length<2) continue;
+    // Haversine total dla tej trasy (żeby dopasować do animBuildFullPath)
+    let havTotal=0;
+    for(let i=1;i<t.geometry.length;i++){
+      havTotal+=haversine({lat:t.geometry[i-1][0],lng:t.geometry[i-1][1]},{lat:t.geometry[i][0],lng:t.geometry[i][1]});
+    }
+    const pairs=pts.map(c=>c.lng+","+c.lat).join(";");
+    const urls=[
+      `https://routing.openstreetmap.de/routed-foot/route/v1/foot/${pairs}?overview=false&steps=true&geometries=geojson`,
+      `https://router.project-osrm.org/route/v1/driving/${pairs}?overview=false&steps=true&geometries=geojson`
+    ];
+    let steps=null;
+    for(const u of urls){
+      try{
+        const r=await fetch(u); if(!r.ok) continue;
+        const j=await r.json();
+        if(j&&j.routes&&j.routes[0]&&j.routes[0].legs){
+          steps=[];
+          j.routes[0].legs.forEach(leg=>{
+            (leg.steps||[]).forEach(step=>{
+              const geom=(step.geometry&&step.geometry.coordinates)||[];
+              steps.push({name:(step.name||"").trim(), coords:geom.map(c=>[c[1],c[0]])});
+            });
+          });
+          break;
+        }
+      }catch(e){}
+    }
+    if(!steps||!steps.length){ cumTotal+=havTotal; continue; }
+    // Licz haversine dystans per krok — zakresy zgadzają się z animBuildFullPath
+    let stepCum=0;
+    for(const step of steps){
+      let sd=0;
+      for(let i=1;i<step.coords.length;i++){
+        sd+=haversine({lat:step.coords[i-1][0],lng:step.coords[i-1][1]},{lat:step.coords[i][0],lng:step.coords[i][1]});
+      }
+      if(step.name){
+        segments.push({startDist:cumTotal+stepCum, endDist:cumTotal+stepCum+sd, name:step.name});
+      }
+      stepCum+=sd;
+    }
+    cumTotal+=stepCum;
+  }
+  return segments;
+}
+function currentStreetAt(segments, dist){
+  if(!segments||!segments.length) return "";
+  for(const s of segments){ if(dist>=s.startDist && dist<=s.endDist) return s.name; }
+  return "";
 }
 
 // ===== EKSPORT PNG — statyczna mapa w wysokiej rozdzielczości =====
@@ -1609,7 +1664,7 @@ function playOnMap(mode){
     icon:L.divIcon({className:"",iconSize:[26,26],iconAnchor:[13,13],html:'<div class="anim-marker"></div>'}),
     interactive:false, zIndexOffset:10000
   }).addTo(map);
-  // === EMBED: ciemna zasłona nad mapą + rysujący się jasny ślad ===
+  // === EMBED: ciemna zasłona + rysujący się jasny ślad + follow-marker ===
   if(mode==="embed"){
     if(!mapAnim.darkVeil){
       mapAnim.darkVeil=document.createElement("div");
@@ -1620,14 +1675,16 @@ function playOnMap(mode){
     if(mapAnim.revealLine){ map.removeLayer(mapAnim.revealLine); }
     mapAnim.revealLine=L.polyline([[path[0].lat,path[0].lng]],{
       pane:"reveal",
-      color: mode==="embed" ? "#fbbf24" : "#ff6b1a",
-      weight:5, opacity:1,
+      color:"#fbbf24", weight:5, opacity:1,
       lineCap:"round", lineJoin:"round"
     }).addTo(map);
     mapAnim.revealedIdx=0;
+    // Zoom in do startu — mapa będzie potem follow-marker
+    try{ map.setView([path[0].lat,path[0].lng], 16, {animate:false}); }catch(e){}
   }
   const km=total/1000;
-  mapAnim.duration=Math.round(1000*Math.max(12,Math.min(35, 10+km*1.5)));
+  // Wolniejsza animacja: 5km=35s, 10km=55s (2x wolniej niż poprzednio)
+  mapAnim.duration=Math.round(1000*Math.max(20,Math.min(70, 15+km*4)));
   mapAnim.startedAt=performance.now();
   mapAnim.mode=mode;
   mapAnim.loop=(mode==="embed"); // embed zapętla się w kółko
@@ -1675,6 +1732,18 @@ function playOnMap(mode){
         const cur=(dist/1000).toFixed(2).replace(".",",");
         const tot=(total/1000).toFixed(2).replace(".",",");
         sk.textContent=cur+" / "+tot;
+      }
+      // Follow marker — mapa "leci" za pinezką
+      try{ map.panTo([pos.lat,pos.lng],{animate:false,noMoveStart:true}); }catch(e){}
+      // Aktualna ulica (tylko update DOM gdy się zmieniła)
+      const streetsEl=$("embedStreets");
+      if(streetsEl && mapAnim.streetSegments){
+        const cur=currentStreetAt(mapAnim.streetSegments, dist);
+        if(cur && streetsEl.dataset.current!==cur){
+          streetsEl.dataset.current=cur;
+          streetsEl.innerHTML="<b>Aktualnie na</b>"+cur;
+          streetsEl.style.display="block";
+        }
       }
     }
     if(mode==="viewer"){
@@ -2002,14 +2071,14 @@ async function activateViewerModeIfNeeded(){
           if(val){ val.textContent="↑"+el.gain+"  ↓"+el.loss+" m"; val.style.display="block"; }
         }).catch(()=>{});
       }catch(e){}
-      // Ulice (async) — pokaż listę pod przewyższeniem
+      // Ulice (async) — segmenty per dystans, do pokazywania „aktualnej" ulicy pod pinezką
       try{
-        gatherStreetNames().then(streets=>{
-          if(!streets||!streets.length) return;
+        gatherStreetSegments().then(segs=>{
+          mapAnim.streetSegments=segs||[];
           const el=$("embedStreets");
-          if(el){
-            const list=streets.slice(0,10).join(" · ")+(streets.length>10?" · +"+(streets.length-10):"");
-            el.innerHTML="<b>Ulice na trasie</b>"+list;
+          if(el && segs && segs.length){
+            // Pokazuj pierwszą ulicę na starcie
+            el.innerHTML="<b>Startujemy z</b>"+segs[0].name;
             el.style.display="block";
           }
         }).catch(()=>{});
