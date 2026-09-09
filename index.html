@@ -2309,7 +2309,7 @@ async function activateViewerModeIfNeeded(){
       const nm=(data.name||"Trasa").trim();
       const vt=$("vhTitle"); if(vt) vt.textContent=nm;
       viewerUpdateMeta();
-      try{ fitToRoute(); setTimeout(fitToRoute,300); }catch(e){}
+      whenMapReady(()=>{ try{ fitToRoute(); setTimeout(fitToRoute,300); }catch(e){} });
     } else {
       // embed — motyw FOR RUN
       document.body.classList.add("embed-mode");
@@ -2319,11 +2319,11 @@ async function activateViewerModeIfNeeded(){
         mapAnim.darkVeil.className="map-dark-veil";
         map.getContainer().appendChild(mapAnim.darkVeil);
       }
-      try{
+      whenMapReady(()=>{ try{
         const all=[];
         tracks.forEach(t=>{ if(t.geometry) t.geometry.forEach(g=>all.push([g[0],g[1]])); });
         if(all.length>=2){ const b=L.latLngBounds(all); map.fitBounds(b,{padding:[10,10],maxZoom:19,animate:false}); }
-      }catch(e){}
+      }catch(e){} });
       const nm=(data.name||"Trasa").trim();
       const sub=$("embedSubtitle"); if(sub) sub.textContent=nm;
       const totalKm=tracks.reduce((a,t)=>a+(t.meters||0),0)/1000;
@@ -2348,7 +2348,7 @@ async function activateViewerModeIfNeeded(){
           }
         }).catch(()=>{});
       }catch(e){}
-      setTimeout(()=>playOnMap("embed"), 1200);
+      whenMapReady(()=>setTimeout(()=>playOnMap("embed"), 800));
     }
   }catch(e){ console.error(e); if(!isEmbed) toast("Nie udało się otworzyć podglądu."); }
 }
@@ -2577,6 +2577,37 @@ if("serviceWorker" in navigator){
       });
     }).catch(()=>{});
   });
+}
+// ===== ODPORNOSC NA UKRYTY KONTENER (iframe w zakladce / display:none) =====
+// Gdy mapa startuje w ukrytym elemencie, Leaflet mierzy 0x0 i rysuje sie pusta.
+// ResizeObserver wola invalidateSize gdy kontener dostanie realny rozmiar,
+// a whenMapReady() odracza pierwsze dopasowanie widoku i animacje embed.
+let _mapEverSized=false,_mapSizedCbs=[],_lastMapW=0,_lastMapH=0;
+function mapHasSize(){const el=map.getContainer();return el.clientWidth>0&&el.clientHeight>0;}
+function whenMapReady(cb){ if(mapHasSize()) cb(); else _mapSizedCbs.push(cb); }
+function onMapContainerResize(){
+  if(!mapHasSize()) return;
+  const el=map.getContainer(),w=el.clientWidth,h=el.clientHeight;
+  map.invalidateSize();
+  if(_mapEverSized && w===_lastMapW && h===_lastMapH) return;
+  _lastMapW=w;_lastMapH=h;
+  if(!_mapEverSized){
+    _mapEverSized=true;
+    if(document.body.classList.contains("embed-mode")||document.body.classList.contains("viewer-mode")){
+      try{
+        const all=[];
+        tracks.forEach(t=>{ if(t.geometry) t.geometry.forEach(g=>all.push([g[0],g[1]])); });
+        if(all.length>=2){
+          const pad=document.body.classList.contains("embed-mode")?[10,10]:[40,40];
+          map.fitBounds(L.latLngBounds(all),{padding:pad,maxZoom:19,animate:false});
+        }
+      }catch(e){}
+    }
+    const cbs=_mapSizedCbs;_mapSizedCbs=[];cbs.forEach(fn=>{try{fn();}catch(e){}});
+  }
+}
+if("ResizeObserver" in window){
+  try{ new ResizeObserver(onMapContainerResize).observe(map.getContainer()); }catch(e){}
 }
 function fixSize(){map.invalidateSize();}
 window.addEventListener("resize",fixSize);
