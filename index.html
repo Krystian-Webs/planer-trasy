@@ -503,8 +503,18 @@
           <div class="row" style="margin-top:6px"><button class="btn" id="embedCopyBtn">📋 Kopiuj kod</button><button class="btn" id="embedPreviewBtn">👁 Podgląd</button></div>
         </div>
         <p class="hint">Wkleisz gotowy kod iframe na swoją stronę. Widz zobaczy sam kawałek mapy z linią trasy i pinezką jadącą w kółko — bez pinezek z numerami, bez panelu, bez kontrolek. Dla dwóch dystansów (5 km i 10 km) zrób dwa osobne projekty i wklej dwa iframe'y obok siebie.</p>
-        <button class="btn primary" id="videoDownloadBtn" disabled style="margin-top:8px">🎥 Pobierz film 1080×1920 (Instagram / TikTok)</button>
-        <p class="hint">Zapisze pionowy film ~16 s z animacją trasy w motywie FOR RUN: czarna mapa, żółty ślad, licznik km i przewyższenia. Gotowe do wrzucenia na Reels, Stories albo TikToka. Uwaga: renderowanie zajmuje ok. 20 sekund.</p>
+        
+        <div style="margin-top:12px; padding:10px; background:var(--panel-2); border:1px solid var(--line); border-radius:var(--r-sm);">
+          <div style="font-size:11px; font-weight:700; color:var(--accent-2); margin-bottom:6px; text-transform:uppercase; letter-spacing:.5px;">Prędkość wideo (Reels / TikTok):</div>
+          <select id="videoSpeedSelect" class="fld" style="font-size:12px; padding:8px; margin-bottom:8px;">
+            <option value="slow">🐢 Bardzo wolno (slow-motion)</option>
+            <option value="normal" selected>▶️ Wolno (kinowy ruch — domyślnie)</option>
+            <option value="fast">⚡ Szybko (dynamiczny skrót)</option>
+          </select>
+          <button class="btn primary" id="videoDownloadBtn" disabled style="width:100%">🎥 Pobierz film 1080×1920</button>
+        </div>
+        <p class="hint">Zapisze pionowy film z animacją trasy w motywie FOR RUN: czarna mapa, żółty ślad, licznik km i przewyższenia. Gotowe do wrzucenia na Reels, Stories albo TikToka.</p>
+
         <button class="btn primary" id="pngBtn" disabled style="margin-top:8px">📸 Pobierz mapę jako PNG</button>
         <p class="hint">Obraz z trasą i listą ulic pod spodem — do wysłania jako załącznik lub wydrukowania. Bez ikon punktów.</p>
         <button class="btn primary" id="gpxBtn" disabled style="margin-top:8px">⬇ Pobierz plik GPX</button>
@@ -625,24 +635,21 @@ function newTrack(name,color){const t={id:idSeq++,name:name||("Trasa "+trackSeq)
 function syncActive(){if(activeTrack){activeTrack.stops=stops;activeTrack.geometry=lastGeometry;activeTrack.meters=totalMeters;}}
 function setActiveTrack(id){
   syncActive();
-  // schowaj markery dotychczasowej aktywnej
   stops.forEach(s=>{if(s.marker){map.removeLayer(s.marker);s.marker=null;}});
   activeTrack=tracks.find(t=>t.id===id)||tracks[0];
   stops=activeTrack.stops;lastGeometry=activeTrack.geometry;totalMeters=activeTrack.meters;
-  // odtwórz markery nowej aktywnej
   stops.forEach(s=>{if(s.latlng)makeStopMarker(s);});
   renderTrackList();renderStops();rebuildRoute();
 }
 
 const map=L.map("map",{zoomControl:false}).setView([52.2297,21.0122],13);
 const baseRoads=L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,crossOrigin:true,attribution:"&copy; OpenStreetMap contributors"}).addTo(map);
-const baseTopo=L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",{maxZoom:17,subdomains:"abc",crossOrigin:true,attribution:"&copy; OpenStreetMap · &copy; OpenTopoMap (CC-BY-SA)"});
+const baseTopo=L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",{maxZoom:17,subdomains:"abc",crossOrigin:true,attribution:"&copy; OpenStreetMap &middot; &copy; OpenTopoMap (CC-BY-SA)"});
 const baseSat=L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",{maxZoom:19,crossOrigin:true,attribution:"&copy; Esri"});
 L.control.layers({"Mapa drogowa (OSM)":baseRoads,"Turystyczna (topo)":baseTopo,"Satelita":baseSat},null,{position:"topright"}).addTo(map);
 L.control.zoom({position:"topright"}).addTo(map);
 const $=id=>document.getElementById(id);
-// ===== KONFIGURACJA FIREBASE (do współpracy na żywo) =====
-// Wklej tu dane z Twojego darmowego projektu Firebase (instrukcja od asystenta).
+
 const FIREBASE_CONFIG = {
   apiKey: "AIzaSyC0tshqAwilkhwDsaLJEllQV2jYcYbxiRM",
   authDomain: "planer-trasy.firebaseapp.com",
@@ -693,7 +700,6 @@ function makeStopMarker(s){
     div.style.cssText="min-width:180px;text-align:center";
     div.innerHTML=`<div style="font:600 13px sans-serif;margin-bottom:10px">${lab}</div>`;
     const btnStyle="border:none;border-radius:8px;padding:8px 10px;font:600 12px sans-serif;cursor:pointer;width:100%;margin-bottom:6px";
-    // Wstaw punkt po tym
     const bInsert=document.createElement("button");
     bInsert.textContent="📍 Wstaw punkt po tym";
     bInsert.style.cssText=btnStyle+";background:#fbbf24;color:#0a0e13";
@@ -704,7 +710,6 @@ function makeStopMarker(s){
       toast("📍 Zaznaczono „"+lab+"”. Klik na mapie wstawi PO tym punkcie. ESC = anuluj.");
     };
     div.appendChild(bInsert);
-    // Zawróć od tego punktu (dla tras out-and-back)
     const bReturn=document.createElement("button");
     bReturn.textContent="↩️ Zawróć od tego punktu";
     bReturn.style.cssText=btnStyle+";background:#3b82f6;color:#fff";
@@ -713,7 +718,6 @@ function makeStopMarker(s){
       const validStops=stops.filter(x=>x.latlng);
       const myIdx=validStops.findIndex(x=>x.id===s.id);
       if(myIdx<1){ toast("Nie da się zawrócić — to pierwszy punkt trasy."); return; }
-      // Dodaj waypointy od myIdx-1 do 0 (kolejność odwrotna) na koniec listy
       for(let i=myIdx-1;i>=0;i--){
         const src=validStops[i];
         const ns={id:idSeq++,latlng:L.latLng(src.latlng.lat,src.latlng.lng),address:src.address||"",marker:null};
@@ -725,7 +729,6 @@ function makeStopMarker(s){
       toast("↩️ Dodano powrót — trasa jedzie do „"+lab+"” i wraca do startu.");
     };
     div.appendChild(bReturn);
-    // Usuń
     const bDel=document.createElement("button");
     bDel.textContent="✕ Usuń ten punkt";
     bDel.style.cssText=btnStyle+";background:#e23b4e;color:#fff;margin-bottom:0";
@@ -765,7 +768,6 @@ function renderTrackList(){const wrap=$("trackList");if(!wrap)return;wrap.innerH
 function addTrackUI(){const t=newTrack();setActiveTrack(t.id);setMode("route");toast("✏️ Nowa trasa („"+t.name+"”) — klikaj mapę, żeby ją rysować.");}
 function removeTrack(id){if(tracks.length<=1){toast("To jedyna trasa.");return;}const t=tracks.find(x=>x.id===id);if(!t)return;if(t.line)map.removeLayer(t.line);t.stops.forEach(s=>{if(s.marker)map.removeLayer(s.marker);});const wasActive=activeTrack&&activeTrack.id===id;tracks=tracks.filter(x=>x.id!==id);if(wasActive){activeTrack=null;setActiveTrack(tracks[0].id);}else{renderTrackList();}toast("Usunięto trasę.");}
 async function placeRouteStop(latlng,address){
-  // Jeśli mamy zaznaczony punkt do wstawienia PO — użyj go
   if(insertAfterStopId!==null){
     const idx=stops.findIndex(s=>s.id===insertAfterStopId);
     if(idx>=0){
@@ -780,11 +782,9 @@ async function placeRouteStop(latlng,address){
       toast("📍 Wstawiono nowy punkt.");
       return;
     }
-    // Nie znaleziono targetu (usunięty w międzyczasie) — resetuj
     insertAfterStopId=null;
     highlightInsertCursor();
   }
-  // Zwykłe dodanie na końcu
   ensureEndpoints();
   let s;
   if(!stops[0].latlng) s=stops[0];
@@ -822,16 +822,12 @@ function redrawAllTrackLines(){tracks.forEach(t=>{if(t.line){map.removeLayer(t.l
 let _rebuildGen=0;
 async function rebuildRoute(){
   const coords=stops.filter(s=>s && s.latlng && isFinite(s.latlng.lat) && isFinite(s.latlng.lng)).map(s=>s.latlng);
-  console.log("[rebuild] stops="+stops.length+" valid="+coords.length+" snap="+snap+" activeTrack="+(activeTrack?activeTrack.id:"NULL"));
-  // Zabezpieczenie: jeśli nie ma activeTrack, stwórz go (ale nie nadpisuj stops)
   if(!activeTrack){
-    console.warn("[rebuild] no active track, creating one");
     const t=newTrack();
     activeTrack=t;
     if(stops.length===0) stops=activeTrack.stops;
-    else activeTrack.stops=stops; // zachowaj istniejące stops
+    else activeTrack.stops=stops;
   }
-  // KROK 1: NARYSUJ PROSTĄ LINIĘ NATYCHMIAST (synchronicznie, bez await)
   if(coords.length>=2){
     lastGeometry=coords.map(c=>[c.lat,c.lng]);
     let m=0;
@@ -855,16 +851,12 @@ async function rebuildRoute(){
   updateStats();
   updateTarget();
   renderTrackList();
-  const drawn=(activeTrack&&activeTrack.line)?"YES":"NO";
-  console.log("[rebuild] straight line drawn: "+drawn+" (geom.len="+lastGeometry.length+", meters="+Math.round(totalMeters)+")");
-  // KROK 2: TERAZ SPRÓBUJ ULEPSZYĆ przez OSRM (async, w tle) — jeśli się uda, podmieni linię na routing po drogach
   if(coords.length>=2 && snap){
     const myGen=++_rebuildGen;
     try{
       const res=await fetchRoute(coords);
-      if(myGen!==_rebuildGen){ console.log("[rebuild osrm] abandoned (newer)"); return; }
+      if(myGen!==_rebuildGen) return;
       if(res && res.geometry && Array.isArray(res.geometry) && res.geometry.length>=2){
-        console.log("[rebuild osrm] OK "+res.meters+"m/"+res.geometry.length+"pts — upgrading line");
         lastGeometry=res.geometry;
         totalMeters=res.meters||totalMeters;
         syncActive();
@@ -873,15 +865,10 @@ async function rebuildRoute(){
         drawKmMarkers();
         updateStats();
         updateTarget();
-      } else {
-        console.log("[rebuild osrm] no result — keeping straight line");
       }
-    }catch(e){
-      console.warn("[rebuild osrm] error:",e);
-    }
+    }catch(e){}
   }
 }
-// Globalny łapacz błędów — pokazuje je jako toast (żebyśmy widzieli co się dzieje bez F12)
 window.addEventListener("error",e=>{
   console.error("Global error:",e.error||e.message);
   try{ toast("❌ JS: "+(e.message||"nieznany błąd").slice(0,100)); }catch(_){}
@@ -894,7 +881,7 @@ async function insertStopOnLine(latlng){
   const k=kmAlong(latlng);if(k==null){placeRouteStop(latlng);return;}
   let insertIdx=-1;
   for(let i=0;i<stops.length;i++){if(!stops[i].latlng)continue;const ki=kmAlong(stops[i].latlng);if(ki!=null&&ki>k+0.0005){insertIdx=i;break;}}
-  if(insertIdx===-1)insertIdx=stops.length-1; // przed metą
+  if(insertIdx===-1)insertIdx=stops.length-1;
   const s={id:idSeq++,latlng,address:"",marker:null};makeStopMarker(s);
   stops.splice(insertIdx,0,s);
   renderStops();rebuildRoute();
@@ -905,7 +892,7 @@ function drawKmMarkers(){if(kmLayer){map.removeLayer(kmLayer);kmLayer=null;}if(!
 function updateStats(){syncActive();const sum=tracks.reduce((a,t)=>a+(t.meters||0),0);$("distVal").textContent=(sum/1000).toFixed(2).replace(".",",");const db=$("distBadge");if(db)db.textContent=(tracks.length>1?"📏 Suma: ":"📏 Trasa: ")+(sum/1000).toFixed(2).replace(".",",")+" km"+(tracks.length>1&&activeTrack?" (tu: "+(totalMeters/1000).toFixed(2).replace(".",",")+")":"");$("cpVal").textContent=pois.filter(p=>p.type==="checkpoint").length;$("poiCount").textContent=pois.length;$("listCount").textContent=pois.length;$("clearPoiBtn").disabled=pois.length===0;$("gpxBtn").disabled=lastGeometry.length<2&&pois.length===0;const _pngBtn=$("pngBtn");if(_pngBtn)_pngBtn.disabled=!tracks.some(t=>t.geometry&&t.geometry.length>=2);const _playBtn=$("playRouteBtn");if(_playBtn)_playBtn.disabled=!tracks.some(t=>t.geometry&&t.geometry.length>=2);const _vidBtn=$("videoDownloadBtn");if(_vidBtn)_vidBtn.disabled=!tracks.some(t=>t.geometry&&t.geometry.length>=2);try{updateTime();}catch(e){}}
 
 function addPoi(type,latlng,name){const id=idSeq++;const obj={id,type,latlng,name:name||"",note:""};obj.marker=L.marker(latlng,{icon:poiIcon(type),draggable:true}).addTo(map);obj.marker.on("dragend",()=>{obj.latlng=obj.marker.getLatLng();renderPoiList();});obj.marker.on("click",()=>openEditor(id));pois.push(obj);renderPoiList();updateStats();return obj;}
-function renderPoiList(){const el=$("poiList");if(pois.length===0){el.innerHTML='<div class="empty">Brak punktów. Wybierz typ powyżej i kliknij na mapie, albo rozmieść automatycznie.</div>';return;}const cps=pois.filter(p=>p.type==="checkpoint").map(p=>({p,km:kmAlong(p.latlng)??1e9})).sort((a,b)=>a.km-b.km);cps.forEach((x,i)=>x.p._cpNo=i+1);pois.forEach(p=>p.marker.setIcon(poiIcon(p.type,p.type==="checkpoint"?p._cpNo:null)));el.innerHTML="";Object.keys(POI).forEach(type=>{const group=pois.filter(p=>p.type===type);if(!group.length)return;const head=document.createElement("div");head.className="poiGroupHead";head.style.borderLeft="4px solid "+POI[type].color;head.style.paddingLeft="8px";head.innerHTML=`<span class="ic">${POI[type].ic}</span><span class="gl">${POI[type].label}</span><span class="count" style="background:${POI[type].color}">${group.length}</span>`;el.appendChild(head);const sorted=group.map(p=>({p,km:kmAlong(p.latlng)})).sort((a,b)=>(a.km??1e9)-(b.km??1e9));sorted.forEach(({p,km})=>{const def=POI[p.type].label+(p.type==="checkpoint"?" "+p._cpNo:"");const display=p.name||def;const kmTxt=km!=null?km.toFixed(2).replace(".",",")+" km":"—";const item=document.createElement("div");item.className="poiItem";item.dataset.id=p.id;item.innerHTML=`<div class="head"><span class="ic">${POI[p.type].ic}</span><span class="nm">${display.replace(/</g,"&lt;")}</span><span class="km">${kmTxt}</span><button class="del" title="Usuń">✕</button></div><div class="edit"><input type="text" class="fld" placeholder="Nazwa (np. ${def})" value="${(p.name||"").replace(/"/g,"&quot;")}"><textarea class="fld" placeholder="Notatka — obsada, sprzęt, godziny otwarcia">${(p.note||"").replace(/</g,"&lt;")}</textarea></div>`;item.querySelector(".head").onclick=ev=>{if(ev.target.classList.contains("del")){map.removeLayer(p.marker);pois=pois.filter(x=>x.id!==p.id);renderPoiList();updateStats();return;}item.classList.toggle("open");if(item.classList.contains("open"))map.panTo(p.latlng);};const ni=item.querySelector("input"),ta=item.querySelector("textarea");ni.oninput=()=>{p.name=ni.value;item.querySelector(".nm").textContent=p.name||def;};ta.oninput=()=>{p.note=ta.value;};el.appendChild(item);});});}
+function renderPoiList(){const el=$("poiList");if(pois.length===0){el.innerHTML='<div class="empty">Brak punktów. Wybierz typ powyżej i kliknij na mapę, albo rozmieść automatycznie.</div>';return;}const cps=pois.filter(p=>p.type==="checkpoint").map(p=>({p,km:kmAlong(p.latlng)??1e9})).sort((a,b)=>a.km-b.km);cps.forEach((x,i)=>x.p._cpNo=i+1);pois.forEach(p=>p.marker.setIcon(poiIcon(p.type,p.type==="checkpoint"?p._cpNo:null)));el.innerHTML="";Object.keys(POI).forEach(type=>{const group=pois.filter(p=>p.type===type);if(!group.length)return;const head=document.createElement("div");head.className="poiGroupHead";head.style.borderLeft="4px solid "+POI[type].color;head.style.paddingLeft="8px";head.innerHTML=`<span class="ic">${POI[type].ic}</span><span class="gl">${POI[type].label}</span><span class="count" style="background:${POI[type].color}">${group.length}</span>`;el.appendChild(head);const sorted=group.map(p=>({p,km:kmAlong(p.latlng)})).sort((a,b)=>(a.km??1e9)-(b.km??1e9));sorted.forEach(({p,km})=>{const def=POI[p.type].label+(p.type==="checkpoint"?" "+p._cpNo:"");const display=p.name||def;const kmTxt=km!=null?km.toFixed(2).replace(".",",")+" km":"—";const item=document.createElement("div");item.className="poiItem";item.dataset.id=p.id;item.innerHTML=`<div class="head"><span class="ic">${POI[p.type].ic}</span><span class="nm">${display.replace(/</g,"&lt;")}</span><span class="km">${kmTxt}</span><button class="del" title="Usuń">✕</button></div><div class="edit"><input type="text" class="fld" placeholder="Nazwa (np. ${def})" value="${(p.name||"").replace(/"/g,"&quot;")}"><textarea class="fld" placeholder="Notatka — obsada, sprzęt, godziny otwarcia">${(p.note||"").replace(/</g,"&lt;")}</textarea></div>`;item.querySelector(".head").onclick=ev=>{if(ev.target.classList.contains("del")){map.removeLayer(p.marker);pois=pois.filter(x=>x.id!==p.id);renderPoiList();updateStats();return;}item.classList.toggle("open");if(item.classList.contains("open"))map.panTo(p.latlng);};const ni=item.querySelector("input"),ta=item.querySelector("textarea");ni.oninput=()=>{p.name=ni.value;item.querySelector(".nm").textContent=p.name||def;};ta.oninput=()=>{p.note=ta.value;};el.appendChild(item);});});}
 function openEditor(id){const item=document.querySelector(`.poiItem[data-id="${id}"]`);if(item){$("panel").classList.remove("collapsed");item.classList.add("open");item.scrollIntoView({behavior:"smooth",block:"center"});}}
 
 function openTypeChooser(latlng){
@@ -945,28 +932,22 @@ $("loadBtn").onclick=()=>$("fileInput").click();
 $("fileInput").onchange=async e=>{
   const f=e.target.files[0];if(!f)return;
   const rd=new FileReader();
-  rd.onerror=()=>{ toast("Nie udało się odczytać pliku (błąd systemu)."); };
+  rd.onerror=()=>{ toast("Nie udało się odczytać pliku."); };
   rd.onload=async()=>{
     let data;
     try{ data=JSON.parse(rd.result); }
-    catch(err){ toast("Plik nie jest prawidłowym JSON — sprawdź czy nie jest uszkodzony."); console.error("JSON parse:",err); e.target.value=""; return; }
-    if(!data || typeof data!=="object"){ toast("Plik nie zawiera projektu (zły format)."); e.target.value=""; return; }
-    // Ile jest punktów łącznie (do walidacji)?
+    catch(err){ toast("Plik nie jest prawidłowym JSON."); e.target.value=""; return; }
+    if(!data || typeof data!=="object"){ toast("Zły format pliku."); e.target.value=""; return; }
     let totalStops=0;
     if(data.tracks && data.tracks.length) data.tracks.forEach(t=>{ if(t.stops) totalStops+=t.stops.filter(s=>s && typeof s.lat==="number" && typeof s.lng==="number").length; });
     else if(data.stops) totalStops=data.stops.filter(s=>s && typeof s.lat==="number" && typeof s.lng==="number").length;
-    else if(data.waypoints) totalStops=data.waypoints.filter(s=>s && typeof s.lat==="number" && typeof s.lng==="number").length;
     const poiCount=(data.pois && data.pois.length)? data.pois.filter(p=>p && typeof p.lat==="number" && typeof p.lng==="number").length:0;
-    if(totalStops===0 && poiCount===0){
-      toast("Plik nie ma zapisanych punktów trasy — jest pusty.");
-      e.target.value=""; return;
-    }
+    if(totalStops===0 && poiCount===0){ toast("Plik nie ma punktów trasy."); e.target.value=""; return; }
     try{
       await loadProject(data);
-      toast("Wczytano ✓ ("+totalStops+" pkt trasy"+(poiCount?", "+poiCount+" punktów":"")+")");
+      toast("Wczytano ✓");
     }catch(err){
-      toast("Błąd wczytywania: "+(err && err.message || err));
-      console.error("loadProject error:",err);
+      toast("Błąd wczytywania");
     }
     e.target.value="";
   };
@@ -991,7 +972,6 @@ async function loadProject(d,keepView){
   if(!keepView){fitToRoute();setTimeout(fitToRoute,250);}
 }
 
-// ---------- target distance (5 / 10 km / custom) ----------
 let targetKm=null, targetMarker=null;
 function fmtkm(n){return (Math.round(n*100)/100).toString().replace(".",",");}
 function setTarget(km){targetKm=km;document.querySelectorAll("#targetBtns .btn[data-km]").forEach(b=>b.classList.toggle("primary",+b.dataset.km===km));updateTarget();}
@@ -1009,28 +989,27 @@ function updateTarget(){
   }
   const diff=totalMeters-target;
   if(Math.abs(diff)<=20){st.innerHTML=`✅ Trasa ma <b>dokładnie ${fmtkm(targetKm)} km</b>.`;st.style.color="#33c27a";}
-  else if(diff<0){st.innerHTML=`Masz <b>${cur} km</b> — brakuje <b>${Math.round(-diff)} m</b> do ${fmtkm(targetKm)} km. Wydłuż trasę.`;st.style.color="";}
-  else{st.innerHTML=`Masz <b>${cur} km</b> — o <b>${Math.round(diff)} m</b> za dużo. Skróć trasę lub dociągnij metę.`;st.style.color="";}
+  else if(diff<0){st.innerHTML=`Masz <b>${cur} km</b> — brakuje <b>${Math.round(-diff)} m</b> do ${fmtkm(targetKm)} km.`;st.style.color="";}
+  else{st.innerHTML=`Masz <b>${cur} km</b> — o <b>${Math.round(diff)} m</b> za dużo.`;st.style.color="";}
   snapBtn.disabled=totalMeters<target;
 }
 $("targetSnapBtn").onclick=async()=>{
   if(!targetKm||lastGeometry.length<2)return;
   const target=targetKm*1000;
-  if(totalMeters<target){toast("Trasa krótsza niż cel — najpierw wydłuż.");return;}
+  if(totalMeters<target){toast("Trasa krótsza niż cel.");return;}
   const located=stops.filter(s=>s.latlng);
   if(located.length<2){toast("Potrzebny start i meta.");return;}
   const pt=pointAtMeters(target),last=located[located.length-1];
   last.latlng=pt;last.marker.setLatLng(pt);last.address=await reverseGeocode(pt);
   renderStops();await rebuildRoute();
-  toast("Meta dociągnięta blisko "+fmtkm(targetKm)+" km");
+  toast("Meta dociągnięta do "+fmtkm(targetKm)+" km");
 };
 
-// ---------- propose a loop route of target length ----------
 function destPoint(c,dist,brg){const R=6371000,lat1=c.lat*Math.PI/180,lng1=c.lng*Math.PI/180,dr=dist/R;const lat2=Math.asin(Math.sin(lat1)*Math.cos(dr)+Math.cos(lat1)*Math.sin(dr)*Math.cos(brg));const lng2=lng1+Math.atan2(Math.sin(brg)*Math.sin(dr)*Math.cos(lat1),Math.cos(dr)-Math.sin(lat1)*Math.sin(lat2));return L.latLng(lat2*180/Math.PI,lng2*180/Math.PI);}
 async function proposeRoute(){
   ensureEndpoints();
   const start=stops[0].latlng;
-  if(!start){toast("Najpierw ustaw Start — kliknij na mapie lub wpisz adres startu.");return;}
+  if(!start){toast("Najpierw ustaw Start.");return;}
   const target=(targetKm||5)*1000;
   const btn=$("proposeBtn"),old=btn.textContent;btn.disabled=true;btn.textContent="Szukam trasy…";
   const N=6,rot=Math.random()*2*Math.PI;
@@ -1044,45 +1023,40 @@ async function proposeRoute(){
     radius*=Math.max(0.5,Math.min(1.8,target/res.meters));
   }
   btn.textContent=old;btn.disabled=false;
-  if(!best){toast("Nie udało się ułożyć trasy — spróbuj ponownie lub przesuń start.");return;}
+  if(!best){toast("Nie udało się ułożyć trasy.");return;}
   stops.forEach(s=>{if(s.marker)map.removeLayer(s.marker);});stops.length=0;
   const mk=ll=>{const s={id:idSeq++,latlng:ll,address:"",marker:null};makeStopMarker(s);return s;};
   stops.push(mk(start));best.pts.forEach(p=>stops.push(mk(p)));stops.push(mk(start));
   if(activeTrack)activeTrack.stops=stops;
   renderStops();await rebuildRoute();
   const all=stops.map(s=>s.latlng);if(all.length)map.fitBounds(L.latLngBounds(all).pad(0.25));
-  toast("Propozycja: "+(best.meters/1000).toFixed(2).replace(".",",")+" km — przeciągnij punkty, by dopasować.");
+  toast("Propozycja: "+(best.meters/1000).toFixed(2).replace(".",",")+" km");
 }
 $("proposeBtn").onclick=proposeRoute;
 
-// ---------- share via link (no server needed) ----------
 function makeShareLink(){
   try{
     const enc=LZString.compressToEncodedURIComponent(JSON.stringify(serialize()));
     const url=location.origin+location.pathname+"#p="+enc;
     $("shareLink").value=url;$("shareWrap").style.display="block";
-    if(navigator.clipboard)navigator.clipboard.writeText(url).then(()=>toast("Link skopiowany — wyślij wspólnikowi.")).catch(()=>toast("Link gotowy — skopiuj poniżej."));
-    else toast("Link gotowy — skopiuj poniżej.");
-    if(url.length>7000)toast("Projekt duży — jeśli link się nie zmieści, użyj zapisu do pliku.");
+    if(navigator.clipboard)navigator.clipboard.writeText(url).then(()=>toast("Link skopiowany.")).catch(()=>toast("Link gotowy."));
+    else toast("Link gotowy.");
   }catch(e){toast("Nie udało się utworzyć linku.");}
 }
 function loadFromHash(){
   const h=location.hash||"";
   if(h.indexOf("#p=")===0){
-    try{const data=JSON.parse(LZString.decompressFromEncodedURIComponent(h.slice(3)));if(data){loadProject(data);toast("Wczytano projekt z linku.");return;}}catch(e){toast("Nie udało się odczytać projektu z linku.");}
+    try{const data=JSON.parse(LZString.decompressFromEncodedURIComponent(h.slice(3)));if(data){loadProject(data);toast("Wczytano projekt z linku.");return;}}catch(e){toast("Błąd wczytywania linku.");}
   }
-  // brak linku z projektem, brak pokoju, brak trybu prezentacji ani embed -> spróbuj wczytać autozapis z tego urządzenia
   if(h.indexOf("#room=")!==0 && h.indexOf("#view=")!==0 && h.indexOf("#embed=")!==0){
-    try{const saved=localStorage.getItem("planer_autosave");if(saved){const d=JSON.parse(saved);const hasTrack=d&&d.tracks&&d.tracks.some(t=>t.stops&&t.stops.length);const hasOld=d&&d.stops&&d.stops.length;if(d&&(hasTrack||hasOld||(d.pois&&d.pois.length))){loadProject(d);toast("Przywrócono ostatni projekt z tego urządzenia.");}}}catch(e){}
+    try{const saved=localStorage.getItem("planer_autosave");if(saved){const d=JSON.parse(saved);const hasTrack=d&&d.tracks&&d.tracks.some(t=>t.stops&&t.stops.length);const hasOld=d&&d.stops&&d.stops.length;if(d&&(hasTrack||hasOld||(d.pois&&d.pois.length))){loadProject(d);toast("Przywrócono autozapis.");}}}catch(e){}
   }
 }
-// autozapis co 4 s, jeśli coś się zmieniło (działa tylko lokalnie na tym urządzeniu)
 let lastAutosave="";
 setInterval(()=>{try{if(typeof serialize!=="function")return;const js=JSON.stringify(serialize());if(js!==lastAutosave){lastAutosave=js;localStorage.setItem("planer_autosave",js);}}catch(e){}},4000);
 $("shareBtn").onclick=makeShareLink;
-$("copyLinkBtn").onclick=async()=>{const i=$("shareLink");i.select();try{await navigator.clipboard.writeText(i.value);}catch(e){try{document.execCommand("copy");}catch(_){}}toast("Skopiowano link.");};
+$("copyLinkBtn").onclick=async()=>{const i=$("shareLink");i.select();try{await navigator.clipboard.writeText(i.value);}catch(e){}toast("Skopiowano.");};
 
-// ---------- elevation profile (Open-Meteo, free) ----------
 async function computeElevation(){
   if(lastGeometry.length<2){toast("Najpierw wyznacz trasę.");return;}
   const btn=$("elevBtn"),old=btn.textContent;btn.disabled=true;btn.textContent="Liczę…";
@@ -1098,7 +1072,7 @@ async function computeElevation(){
     const sm=e.map((v,i)=>{const a=Math.max(0,i-1),b=Math.min(e.length-1,i+1);return(e[a]+v+e[b])/3;});
     let asc=0,desc=0;for(let i=1;i<sm.length;i++){const d=sm[i]-sm[i-1];if(d>0)asc+=d;else desc-=d;}
     drawElevation(pts.map((p,i)=>({dist:p.dist,e:sm[i]})),asc,desc,Math.min(...sm),Math.max(...sm));
-  }catch(err){toast("Nie udało się pobrać wysokości — spróbuj ponownie.");}
+  }catch(err){toast("Nie udało się pobrać wysokości.");}
   btn.textContent=old;btn.disabled=false;
 }
 function drawElevation(data,asc,desc,minE,maxE){
@@ -1112,13 +1086,12 @@ function drawElevation(data,asc,desc,minE,maxE){
 }
 $("elevBtn").onclick=computeElevation;
 
-// ---------- 3D terrain view (MapLibre, lazy-loaded) ----------
 function load3DLibs(){return new Promise((res,rej)=>{if(window.maplibregl)return res();const css=document.createElement("link");css.rel="stylesheet";css.href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css";document.head.appendChild(css);const s=document.createElement("script");s.src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js";s.onload=()=>res();s.onerror=()=>rej();document.head.appendChild(s);});}
 let map3d=null;
 async function open3D(){
   if(lastGeometry.length<2){toast("Najpierw wyznacz trasę.");return;}
   const btn=$("threeBtn"),old=btn.textContent;btn.disabled=true;btn.textContent="Ładuję 3D…";
-  try{await load3DLibs();}catch(e){toast("Nie udało się wczytać widoku 3D (sprawdź internet).");btn.textContent=old;btn.disabled=false;return;}
+  try{await load3DLibs();}catch(e){toast("Błąd ładowania 3D.");btn.textContent=old;btn.disabled=false;return;}
   btn.textContent=old;btn.disabled=false;
   $("threeOverlay").style.display="block";
   const coords=lastGeometry.map(c=>[c[1],c[0]]);
@@ -1150,7 +1123,6 @@ function close3D(){$("threeOverlay").style.display="none";if(map3d){map3d.remove
 $("threeBtn").onclick=open3D;
 $("threeClose").onclick=close3D;
 
-// ---------- GPX export (wszystkie trasy + punkty jako waypointy) ----------
 function exportGPX(){
   syncActive();
   const esc=s=>String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
@@ -1159,12 +1131,10 @@ function exportGPX(){
   tracks.forEach(t=>{if(!t.geometry||t.geometry.length<2)return;g+=`<trk><name>${esc(t.name)}</name><trkseg>`;t.geometry.forEach(c=>{g+=`<trkpt lat="${c[0].toFixed(6)}" lon="${c[1].toFixed(6)}"/>`;});g+=`</trkseg></trk>\n`;});
   g+="</gpx>";
   const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([g],{type:"application/gpx+xml"}));a.download=($("projName").value||"trasa").replace(/[^\w-]+/g,"_")+".gpx";a.click();URL.revokeObjectURL(a.href);
-  toast("Pobrano plik GPX ✓");
+  toast("Pobrano GPX ✓");
 }
 $("gpxBtn").onclick=exportGPX;
 
-// ===== EKSPORT PNG =====
-// Zbiera nazwy ulic wzdłuż każdej trasy przez OSRM (steps=true), z zachowaniem kolejności i bez duplikatów.
 async function gatherStreetNames(){
   const seen=new Set(); const ordered=[];
   for(const t of tracks){
@@ -1191,24 +1161,15 @@ async function gatherStreetNames(){
         }
       }catch(e){}
     }
-    if(!got){
-      try{
-        const p=pts[0];
-        const r=await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${p.lat}&lon=${p.lng}&zoom=17&addressdetails=1`,{headers:{"Accept-Language":"pl"}});
-        if(r.ok){ const j=await r.json(); const nm=j&&j.address&&(j.address.road||j.address.pedestrian||j.address.footway); if(nm && !seen.has(nm)){ seen.add(nm); ordered.push(nm); } }
-      }catch(e){}
-    }
   }
   return ordered;
 }
 
-// Zbiera segmenty ulic z zakresem dystansu (do pokazywania „aktualnej" ulicy pod pinezką)
 async function gatherStreetSegments(){
   const segments=[]; let cumTotal=0;
   for(const t of tracks){
     const pts=t.stops.filter(s=>s.latlng).map(s=>s.latlng);
     if(pts.length<2) continue;
-    // Haversine total dla tej trasy (żeby dopasować do animBuildFullPath)
     let havTotal=0;
     for(let i=1;i<t.geometry.length;i++){
       havTotal+=haversine({lat:t.geometry[i-1][0],lng:t.geometry[i-1][1]},{lat:t.geometry[i][0],lng:t.geometry[i][1]});
@@ -1236,7 +1197,6 @@ async function gatherStreetSegments(){
       }catch(e){}
     }
     if(!steps||!steps.length){ cumTotal+=havTotal; continue; }
-    // Licz haversine dystans per krok — zakresy zgadzają się z animBuildFullPath
     let stepCum=0;
     for(const step of steps){
       let sd=0;
@@ -1258,11 +1218,6 @@ function currentStreetAt(segments, dist){
   return "";
 }
 
-// ===== EKSPORT PNG — statyczna mapa w wysokiej rozdzielczości =====
-// Nie robimy screenshotu ekranu — pobieramy kafle z serwera OpenStreetMap
-// i komponujemy obraz o stałej szerokości 1800 px, niezależnie od rozmiaru ekranu.
-
-// Web Mercator → piksel (rozmiar kafla OSM = 256 px)
 function pngLngLatToPixel(lng, lat, zoom){
   const n=Math.pow(2,zoom), size=256;
   const x=((lng+180)/360)*n*size;
@@ -1329,7 +1284,6 @@ async function renderStaticMap(canvasW,canvasH){
   return {canvas,toXY,zoom};
 }
 
-// Wysokości z Open-Meteo — sumaryczne przewyższenia i zakres
 async function fetchElevationStats(){
   const all=[];
   tracks.forEach(t=>{ if(t.geometry&&t.geometry.length>=2) all.push(t.geometry); });
@@ -1367,7 +1321,6 @@ async function fetchElevationStats(){
   }catch(e){ return null; }
 }
 
-// Rysuje zaokrąglony prostokąt
 function pngRoundRect(ctx,x,y,w,h,r){
   ctx.beginPath();
   ctx.moveTo(x+r,y);
@@ -1394,11 +1347,10 @@ async function exportPNG(){
       fetchElevationStats().catch(()=>null),
       renderStaticMap(MAP_W,MAP_H)
     ]);
-    if(!rendered){ toast("Nie udało się wyrenderować mapy."); return; }
+    if(!rendered){ toast("Nie wygenerowano mapy."); return; }
     btn.textContent="⏳ Rysuję…";
     const {canvas:mapCanvas,toXY}=rendered;
     const mctx=mapCanvas.getContext("2d");
-    // Biała obwódka pod trasami
     tracks.forEach(t=>{
       if(!t.geometry||t.geometry.length<2) return;
       mctx.save();
@@ -1407,7 +1359,6 @@ async function exportPNG(){
       t.geometry.forEach((ll,i)=>{ const p=toXY(ll[0],ll[1]); if(i===0) mctx.moveTo(p.x,p.y); else mctx.lineTo(p.x,p.y); });
       mctx.stroke(); mctx.restore();
     });
-    // Właściwe kolorowe linie
     tracks.forEach(t=>{
       if(!t.geometry||t.geometry.length<2) return;
       mctx.strokeStyle=t.color; mctx.lineWidth=7; mctx.lineJoin="round"; mctx.lineCap="round";
@@ -1415,32 +1366,10 @@ async function exportPNG(){
       t.geometry.forEach((ll,i)=>{ const p=toXY(ll[0],ll[1]); if(i===0) mctx.moveTo(p.x,p.y); else mctx.lineTo(p.x,p.y); });
       mctx.stroke();
     });
-    // Znaczniki start/meta na każdej trasie (numer + S/M gdy jedna trasa)
-    tracks.forEach((t,ti)=>{
-      if(!t.geometry||t.geometry.length<1) return;
-      const first=t.geometry[0], last=t.geometry[t.geometry.length-1];
-      const startLabel=tracks.length>1?String(ti+1):"S";
-      const endLabel=tracks.length>1?String(ti+1):"M";
-      const ps=toXY(first[0],first[1]);
-      mctx.fillStyle="#16a34a"; mctx.strokeStyle="#fff"; mctx.lineWidth=4;
-      mctx.beginPath(); mctx.arc(ps.x,ps.y,18,0,Math.PI*2); mctx.fill(); mctx.stroke();
-      mctx.fillStyle="#fff"; mctx.font="bold 16px 'Space Grotesk', system-ui, sans-serif";
-      mctx.textAlign="center"; mctx.textBaseline="middle";
-      mctx.fillText(startLabel, ps.x, ps.y+1);
-      if(t.geometry.length>1){
-        const pe=toXY(last[0],last[1]);
-        mctx.fillStyle="#dc2626"; mctx.strokeStyle="#fff"; mctx.lineWidth=4;
-        mctx.beginPath(); mctx.arc(pe.x,pe.y,18,0,Math.PI*2); mctx.fill(); mctx.stroke();
-        mctx.fillStyle="#fff";
-        mctx.fillText(endLabel, pe.x, pe.y+1);
-      }
-    });
-    // ===== KOMPOZYCJA FINALNEGO OBRAZU =====
     const W=MAP_W;
     const headerH=140;
     const statsH=115;
     const multiTrack=tracks.length>1;
-    // Legenda tras
     const legendItems=[];
     if(multiTrack){
       tracks.forEach(t=>{ if(t.geometry&&t.geometry.length>=2) legendItems.push({name:t.name,color:t.color,km:(t.meters||0)/1000}); });
@@ -1452,7 +1381,6 @@ async function exportPNG(){
     const legendH=multiTrack? (44 + legRows*54) : 0;
     const sidePad=36;
     const footerH=50;
-    // Ulice — layout w kolumnach
     const colCount=3;
     const gap=14;
     const colW=Math.floor((W-sidePad*2-gap*(colCount-1))/colCount);
@@ -1465,9 +1393,7 @@ async function exportPNG(){
     finalC.width=W; finalC.height=totalH;
     const fx=finalC.getContext("2d");
     fx.imageSmoothingEnabled=true; fx.imageSmoothingQuality="high";
-    // Tło
     fx.fillStyle="#ffffff"; fx.fillRect(0,0,W,totalH);
-    // ===== NAGŁÓWEK =====
     const grad=fx.createLinearGradient(0,0,W,0);
     grad.addColorStop(0,"#ff6b1a"); grad.addColorStop(1,"#ff8a3d");
     fx.fillStyle=grad; fx.fillRect(0,0,W,headerH);
@@ -1479,7 +1405,6 @@ async function exportPNG(){
     const parts=[];
     if(multiTrack) parts.push(`${tracks.length} etapów jednej trasy`);
     if(cpCount>0) parts.push(`${cpCount} punktów kontrolnych`);
-    if(pois.length>cpCount) parts.push(`${pois.length-cpCount} innych punktów`);
     const sub=parts.length? parts.join(" · ") : "Plan trasy — biegi i marsze";
     fx.font="22px 'Space Grotesk', system-ui, sans-serif";
     fx.fillStyle="rgba(255,255,255,.95)";
@@ -1492,21 +1417,14 @@ async function exportPNG(){
     fx.font="20px 'Space Grotesk', system-ui, sans-serif";
     fx.fillStyle="rgba(255,255,255,.95)";
     fx.fillText(dt, W-sidePad, 100);
-    // ===== PASEK STATYSTYK =====
     const statsY=headerH;
     fx.fillStyle="#0f1720"; fx.fillRect(0,statsY,W,statsH);
     const sumKm=tracks.reduce((a,t)=>a+(t.meters||0),0)/1000;
-    const timeSec=(typeof paceSec==="number"&&sumKm>0)?sumKm*paceSec:null;
-    const chips=[];
-    chips.push({lab:"Dystans łącznie", val:sumKm.toFixed(2).replace(".",",")+" km", ic:"📏"});
+    const chips=[{lab:"Dystans łącznie", val:sumKm.toFixed(2).replace(".",",")+" km", ic:"📏"}];
     if(elev){
       chips.push({lab:"Przewyższenie ↑", val:"+"+elev.gain+" m", ic:"⛰"});
       chips.push({lab:"Przewyższenie ↓", val:"−"+elev.loss+" m", ic:"⬇"});
       chips.push({lab:"Wysokość", val:elev.min+"–"+elev.max+" m", ic:"📊"});
-    }
-    if(timeSec){
-      chips.push({lab:"Szacowany czas", val:fmtDur(timeSec), ic:"⏱"});
-      chips.push({lab:"Tempo", val:fmtPace(paceSec)+" /km", ic:"🏃"});
     }
     if(cpCount>0) chips.push({lab:"Pkt. kontrolne", val:String(cpCount), ic:"🚩"});
     const chipCount=chips.length;
@@ -1524,53 +1442,13 @@ async function exportPNG(){
       fx.font="13px 'Space Grotesk', system-ui, sans-serif";
       fx.fillText(c.ic+" "+c.lab.toUpperCase(), cxp+18, chipY+30);
       fx.fillStyle="#fff";
-      let fs=28;
-      fx.font="bold "+fs+"px 'Space Grotesk', system-ui, sans-serif";
-      while(fx.measureText(c.val).width>chipW-36 && fs>14){ fs-=1; fx.font="bold "+fs+"px 'Space Grotesk', system-ui, sans-serif"; }
+      fx.font="bold 28px 'Space Grotesk', system-ui, sans-serif";
       fx.fillText(c.val, cxp+18, chipY+chipH-20);
     });
-    // ===== LEGENDA TRAS (gdy więcej niż jedna) =====
-    if(legendH>0){
-      const legY=headerH+statsH;
-      fx.fillStyle="#f6f7f9"; fx.fillRect(0,legY,W,legendH);
-      fx.fillStyle="#0a0e13"; fx.textAlign="left"; fx.textBaseline="alphabetic";
-      fx.font="bold 17px 'Space Grotesk', system-ui, sans-serif";
-      fx.fillText("Etapy trasy (łącznie jedna trasa)", sidePad, legY+26);
-      const itemW=Math.floor((W-sidePad*2-12*(legPerRow-1))/legPerRow);
-      const itemH=44;
-      legendItems.forEach((it,i)=>{
-        const col=i%legPerRow, row=Math.floor(i/legPerRow);
-        const x=sidePad+col*(itemW+12);
-        const y=legY+40+row*(itemH+8);
-        fx.fillStyle="#fff";
-        pngRoundRect(fx,x,y,itemW,itemH,9); fx.fill();
-        fx.strokeStyle="rgba(0,0,0,.09)"; fx.lineWidth=1;
-        pngRoundRect(fx,x,y,itemW,itemH,9); fx.stroke();
-        if(it.total){
-          fx.fillStyle="#ff6b1a";
-          fx.fillRect(x+12, y+12, 6, itemH-24);
-          fx.fillStyle="#0a0e13"; fx.font="bold 14px 'Space Grotesk', system-ui, sans-serif";
-          fx.fillText("Σ SUMA", x+28, y+20);
-          fx.fillStyle="#ff6b1a"; fx.font="bold 18px 'Space Grotesk', system-ui, sans-serif";
-          fx.fillText(it.km.toFixed(2).replace(".",",")+" km", x+28, y+36);
-        }else{
-          fx.fillStyle=it.color;
-          fx.fillRect(x+12, y+12, 6, itemH-24);
-          fx.fillStyle="#0a0e13"; fx.font="bold 14px 'Space Grotesk', system-ui, sans-serif";
-          const seq=(i+1);
-          const nm=(it.name||"Etap");
-          fx.fillText("ETAP "+seq+" · "+nm.toUpperCase(), x+28, y+20);
-          fx.fillStyle="#475569"; fx.font="14px 'Space Grotesk', system-ui, sans-serif";
-          fx.fillText(it.km.toFixed(2).replace(".",",")+" km", x+28, y+38);
-        }
-      });
-    }
-    // ===== MAPA =====
     const mapY=headerH+statsH+legendH;
     fx.drawImage(mapCanvas, 0, mapY);
     fx.strokeStyle="rgba(0,0,0,.14)"; fx.lineWidth=1;
     fx.strokeRect(0, mapY, W, mapH);
-    // ===== ULICE =====
     let yy=mapY+mapH;
     if(streets.length){
       fx.fillStyle="#f6f7f9"; fx.fillRect(0,yy,W,streetsBoxH);
@@ -1591,24 +1469,21 @@ async function exportPNG(){
         fx.fillText(txt, x+16, y);
       });
     }
-    // ===== STOPKA =====
     const fy=totalH-footerH;
     fx.fillStyle="#0a0e13"; fx.fillRect(0,fy,W,footerH);
     fx.fillStyle="#8fa0b0"; fx.textAlign="center"; fx.textBaseline="middle";
     fx.font="14px 'Space Grotesk', system-ui, sans-serif";
-    fx.fillText("© OpenStreetMap contributors · dane wysokości: Open-Meteo · wygenerowano w Planerze Trasy", W/2, fy+footerH/2);
-    // ===== POBIERZ =====
+    fx.fillText("© OpenStreetMap contributors · Open-Meteo", W/2, fy+footerH/2);
     finalC.toBlob(blob=>{
-      if(!blob){ toast("Nie udało się wygenerować PNG. Spróbuj ponownie."); return; }
+      if(!blob){ toast("Błąd PNG."); return; }
       const a=document.createElement("a");
       const fn=(projName||"trasa").replace(/[^\w\-]+/g,"_")+".png";
       a.href=URL.createObjectURL(blob); a.download=fn; a.click();
       setTimeout(()=>URL.revokeObjectURL(a.href),2000);
-      toast("Pobrano obraz trasy ✓");
+      toast("Pobrano PNG ✓");
     },"image/png");
   }catch(err){
-    console.error(err);
-    toast("Błąd eksportu PNG: "+(err&&err.message||err));
+    toast("Błąd eksportu PNG");
   }finally{
     btn.disabled=false; btn.textContent=oldTxt;
     try{ updateStats(); }catch(e){}
@@ -1616,7 +1491,6 @@ async function exportPNG(){
 }
 $("pngBtn").onclick=exportPNG;
 
-// ---------- estimated time ----------
 let paceSec=360;
 function fmtPace(s){const m=Math.floor(s/60),ss=Math.round(s%60);return m+":"+String(ss).padStart(2,"0");}
 function fmtDur(s){s=Math.round(s);const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),ss=s%60;return h>0?h+":"+String(m).padStart(2,"0")+":"+String(ss).padStart(2,"0"):m+":"+String(ss).padStart(2,"0");}
@@ -1624,7 +1498,6 @@ function updateTime(){const tv=$("timeVal"),ps=$("paceShow");if(!tv)return;const
 $("paceChips").addEventListener("click",e=>{const b=e.target.closest(".chip");if(!b)return;paceSec=+b.dataset.pace;[...e.currentTarget.children].forEach(c=>c.classList.toggle("on",c===b));$("paceCustom").value=fmtPace(paceSec);updateTime();});
 $("paceSet").onclick=()=>{const v=$("paceCustom").value.trim();let s=null;if(v.indexOf(":")>=0){const p=v.split(":");s=(parseInt(p[0])||0)*60+(parseInt(p[1])||0);}else{s=Math.round(parseFloat(v.replace(",","."))*60);}if(s&&s>0){paceSec=s;[...$("paceChips").children].forEach(c=>c.classList.remove("on"));updateTime();toast("Tempo: "+fmtPace(paceSec)+" min/km");}};
 
-// ---------- live collaboration (Firebase) ----------
 function deviceId(){try{let id=localStorage.getItem("planer_device");if(!id){id=Math.random().toString(36).slice(2,9);localStorage.setItem("planer_device",id);}return id;}catch(e){return Math.random().toString(36).slice(2,9);}}
 function deviceColor(){try{let c=localStorage.getItem("planer_color");if(!c){c=LIVE_PALETTE[Math.floor(Math.random()*LIVE_PALETTE.length)];localStorage.setItem("planer_color",c);}return c;}catch(e){return LIVE_PALETTE[0];}}
 let live=false,fdb=null,fauth=null,roomRef=null,presRef=null,myPresRef=null,clientId=deviceId(),myColor=null,lastSentSig="",applyingRemote=false,cursorLayer=null,presenceData={},cursorThrottle=0,liveHeartbeat=null;
@@ -1639,34 +1512,31 @@ function liveCursorMove(e){const now=Date.now();if(now-cursorThrottle<120||!myPr
 function liveStat(msg,kind){const s=$("liveStatus");if(!s)return;s.style.display="block";const c=kind==="ok"?["#13351f","#33c27a"]:kind==="err"?["#3a1318","#ff6b6b"]:["#2a2410","#f4b43d"];s.style.background=c[0];s.style.color=c[1];s.innerHTML=msg;}
 async function startLive(){
   if(live)return;
-  if(!FIREBASE_CONFIG.apiKey){alert("Aby włączyć współpracę na żywo, trzeba najpierw raz skonfigurować darmowy Firebase i wkleić dane do pliku. Poproś asystenta o instrukcję.");return;}
-  // imię jest wymagane
+  if(!FIREBASE_CONFIG.apiKey){alert("Brak konfiguracji Firebase.");return;}
   let myName=($("liveName").value||"").trim();
   if(!myName){try{myName=(localStorage.getItem("planer_name")||"").trim();}catch(e){}if(myName)$("liveName").value=myName;}
-  if(!myName){myName=(prompt("Podaj swoje imię — będzie widoczne dla pozostałych uczestników współpracy:")||"").trim();if(myName)$("liveName").value=myName;}
-  if(!myName){liveStat("✋ Podaj swoje imię w polu powyżej, aby dołączyć do współpracy.","wait");try{$("liveName").focus();}catch(e){}return;}
+  if(!myName){myName=(prompt("Podaj swoje imię:")||"").trim();if(myName)$("liveName").value=myName;}
+  if(!myName){liveStat("Podaj swoje imię.","wait");return;}
   myName=myName.slice(0,20);
   try{localStorage.setItem("planer_name",myName);}catch(e){}
-  liveStat("⏳ Łączę z Firebase…","wait");
-  if(typeof firebase==="undefined"){liveStat("❌ Nie wczytały się biblioteki Firebase.<br>Kliknij u góry „🔄 Odśwież / pobierz najnowszą wersję”, potem spróbuj ponownie.","err");return;}
-  try{if(!firebase.apps.length)firebase.initializeApp(FIREBASE_CONFIG);fdb=firebase.database();}catch(e){liveStat("❌ Błąd Firebase: "+(e&&e.message?e.message:e),"err");return;}
+  liveStat("Łączę z Firebase…","wait");
+  if(typeof firebase==="undefined"){liveStat("Brak bibliotek Firebase","err");return;}
+  try{if(!firebase.apps.length)firebase.initializeApp(FIREBASE_CONFIG);fdb=firebase.database();}catch(e){liveStat("Błąd Firebase","err");return;}
   let room=getRoom();if(!room){room=Math.random().toString(36).slice(2,10);location.hash="room="+room;}
   myColor=deviceColor();
   roomRef=fdb.ref("rooms/"+room+"/project");
   presRef=fdb.ref("rooms/"+room+"/presence");
   myPresRef=presRef.child(clientId);
   fdb.ref(".info/connected").on("value",snap=>{
-    if(snap.val()===true){liveStat("✅ Połączono. Pokój: <b>"+room+"</b><br>Wyślij link wspólnikowi.","ok");myPresRef.set({name:myName,color:myColor,t:Date.now()}).catch(()=>{});}
-    else{liveStat("⏳ Łączę z bazą…","wait");}
+    if(snap.val()===true){liveStat("Połączono z pokojem: <b>"+room+"</b>","ok");myPresRef.set({name:myName,color:myColor,t:Date.now()}).catch(()=>{});}
   });
-  myPresRef.set({name:myName,color:myColor,t:Date.now()}).catch(e=>liveStat("❌ Brak dostępu do bazy: "+e.message+"<br>(sprawdź tryb testowy reguł w Firebase)","err"));
+  myPresRef.set({name:myName,color:myColor,t:Date.now()}).catch(()=>{});
   myPresRef.onDisconnect().remove();
-  // heartbeat: odświeża obecność co 5 s (gdy druga karta tego samego urządzenia się zamknie, ta utrzyma profil)
   if(liveHeartbeat)clearInterval(liveHeartbeat);
   liveHeartbeat=setInterval(()=>{if(myPresRef)myPresRef.update({t:Date.now()}).catch(()=>{});},5000);
   cursorLayer=L.layerGroup().addTo(map);
   map.on("mousemove",liveCursorMove);
-  roomRef.once("value").then(snap=>{const d=snap.val();if(d){applyingRemote=true;loadProject(d,true).then(()=>{applyingRemote=false;lastSentSig=projectSig(d);});}else{lastSentSig=projectSig(serialize());roomRef.set(serialize());}}).catch(e=>liveStat("❌ Nie mogę odczytać pokoju: "+e.message,"err"));
+  roomRef.once("value").then(snap=>{const d=snap.val();if(d){applyingRemote=true;loadProject(d,true).then(()=>{applyingRemote=false;lastSentSig=projectSig(d);});}else{lastSentSig=projectSig(serialize());roomRef.set(serialize());}}).catch(()=>{});
   roomRef.on("value",snap=>{const d=snap.val();if(!d)return;const sig=projectSig(d);if(sig===lastSentSig)return;applyingRemote=true;loadProject(d,true).then(()=>{applyingRemote=false;lastSentSig=sig;});});
   presRef.on("value",snap=>{presenceData=snap.val()||{};renderPresence();});
   setInterval(()=>{if(!live||applyingRemote)return;const data=serialize();const sig=projectSig(data);if(sig!==lastSentSig){lastSentSig=sig;if(roomRef)roomRef.set(data);}},1500);
@@ -1676,37 +1546,18 @@ async function startLive(){
   $("liveWrap").style.display="block";
 }
 $("liveBtn").onclick=startLive;
-$("liveCopyBtn").onclick=async()=>{const i=$("liveLink");i.select();try{await navigator.clipboard.writeText(i.value);}catch(e){}toast("Skopiowano link.");};
+$("liveCopyBtn").onclick=async()=>{const i=$("liveLink");i.select();try{await navigator.clipboard.writeText(i.value);}catch(e){}toast("Skopiowano.");};
 
-// ==========================================================
-// PLANY I DOSTĘP — gotowe pod przyszły abonament
-// ==========================================================
-// Jak to działa:
-//  - Każda "premium" funkcja ma klucz (np. "gpx", "live").
-//  - Plan określa, które klucze są dostępne. "*" = wszystko.
-//  - Teraz domyślny plan to "admin" (pełny dostęp dla Ciebie).
-//  - Gdy podłączysz płatności: ustaw DEFAULT_PLAN="free",
-//    a po zakupie wywołaj setPlan("pro") / setPlan("admin").
-//  - Kod administratora (zmień na własny!): ADMIN_CODE poniżej.
-const DEFAULT_PLAN="admin";            // <— później zmień na "free"
-const ADMIN_CODE="ORGANIZATOR-2026";   // <— ZMIEŃ na własny tajny kod
+const DEFAULT_PLAN="admin";
+const ADMIN_CODE="ORGANIZATOR-2026";
 const PLAN_META={
-  free:{label:"Start",price:"0 zł",per:"na zawsze",color:"#5f6f80",
-    feats:["Rysowanie trasy i przystanki","Punkty na mapie (wszystkie typy)","Dystans docelowy i tempo","Zapis / wczytanie projektu"],
-    no:["Wiele tras (warianty)","Profil wysokości i 3D","Eksport GPX","Udostępnianie i współpraca na żywo"]},
-  pro:{label:"Pro",price:"—",per:"abonament (do ustalenia)",color:"#3da5f4",tag:"Popularny",
-    feats:["Wszystko z planu Start","Wiele tras w różnych kolorach","Automatyczne punkty kontrolne","Propozycja pętli o zadanej długości","Profil wysokości + widok 3D","Eksport GPX","Udostępnianie linkiem"],
-    no:["Współpraca na żywo (Firebase)"]},
-  admin:{label:"Organizator",price:"—",per:"pełny dostęp (Ty)",color:"#ff6b1a",tag:"Admin",
-    feats:["Wszystko z planu Pro","Współpraca na żywo z zespołem","Kursory i obecność na mapie","Pełny dostęp administratora"],no:[]}
+  free:{label:"Start",price:"0 zł",per:"na zawsze",color:"#5f6f80",feats:["Rysowanie trasy i przystanki","Punkty na mapie","Dystans i tempo","Zapis projektu"],no:["Wiele tras","Profil wysokości","Eksport GPX","Współpraca"]},
+  pro:{label:"Pro",price:"—",per:"abonament",color:"#3da5f4",tag:"Popularny",feats:["Wszystko ze Startu","Wiele tras","Automatyczne punkty","Profil wysokości i 3D","Eksport GPX","Udostępnianie"],no:["Współpraca"]},
+  admin:{label:"Organizator",price:"—",per:"pełny dostęp",color:"#ff6b1a",tag:"Admin",feats:["Wszystko z Pro","Współpraca na żywo","Panel administratora"],no:[]}
 };
-const PLAN_FEATURES={
-  free:["basic"],
-  pro:["basic","multitrack","distribute","propose","elevation","view3d","gpx","share"],
-  admin:"*"
-};
+const PLAN_FEATURES={free:["basic"],pro:["basic","multitrack","distribute","propose","elevation","view3d","gpx","share"],admin:"*"};
 const GATED_BUTTONS={distribBtn:"distribute",proposeBtn:"propose",elevBtn:"elevation",threeBtn:"view3d",gpxBtn:"gpx",shareBtn:"share",liveBtn:"live"};
-const FEATURE_NAMES={multitrack:"Wiele tras",distribute:"Automatyczne punkty kontrolne",propose:"Propozycja trasy",elevation:"Profil wysokości",view3d:"Widok 3D",gpx:"Eksport GPX",share:"Udostępnianie linkiem",live:"Współpraca na żywo"};
+const FEATURE_NAMES={multitrack:"Wiele tras",distribute:"Automatyczne punkty",propose:"Propozycja trasy",elevation:"Profil wysokości",view3d:"Widok 3D",gpx:"Eksport GPX",share:"Udostępnianie",live:"Współpraca"};
 let plan=(function(){try{return localStorage.getItem("planer_plan")||DEFAULT_PLAN;}catch(e){return DEFAULT_PLAN;}})();
 if(!PLAN_META[plan])plan=DEFAULT_PLAN;
 function can(f){const fs=PLAN_FEATURES[plan];return fs==="*"||fs.indexOf(f)>=0;}
@@ -1715,10 +1566,7 @@ function applyPlanUI(){
   const b=$("planBadge");if(b){b.textContent=PLAN_META[plan].label;b.style.background=PLAN_META[plan].color;}
   Object.entries(GATED_BUTTONS).forEach(([id,f])=>{const el=$(id);if(!el)return;if(!el.dataset.base)el.dataset.base=el.innerHTML;const ok=can(f);el.classList.toggle("locked",!ok);el.innerHTML=ok?el.dataset.base:"🔒 "+el.dataset.base;});
 }
-function openPlans(feat){
-  if(feat)toast("„"+(FEATURE_NAMES[feat]||feat)+"” wymaga wyższego planu.");
-  renderPlans();$("plansOverlay").classList.add("show");
-}
+function openPlans(feat){if(feat)toast("Funkcja wymaga wyższego planu.");renderPlans();$("plansOverlay").classList.add("show");}
 function renderPlans(){
   const grid=$("plansGrid");if(!grid)return;grid.innerHTML="";
   Object.entries(PLAN_META).forEach(([key,m])=>{
@@ -1726,16 +1574,11 @@ function renderPlans(){
     const feats=m.feats.map(f=>`<li>${f}</li>`).join("")+m.no.map(f=>`<li class="no">${f}</li>`).join("");
     card.innerHTML=`${m.tag?`<span class="tag">${m.tag}</span>`:""}<div class="pname" style="color:${m.color}">${m.label}</div><div class="pprice">${m.price}</div><div class="pper">${m.per}</div><ul>${feats}</ul>`;
     const btn=document.createElement("button");btn.className="btn"+(key===plan?"":" primary");
-    btn.textContent=key===plan?"✓ Aktywny":(key==="admin"?"Mam kod administratora":"Wybierz");
-    btn.onclick=()=>{
-      if(key===plan)return;
-      if(key==="admin"){const code=(prompt("Podaj kod administratora:")||"").trim();if(code!==ADMIN_CODE){toast("Nieprawidłowy kod.");return;}}
-      setPlan(key);
-    };
+    btn.textContent=key===plan?"✓ Aktywny":(key==="admin"?"Kod admina":"Wybierz");
+    btn.onclick=()=>{if(key===plan)return;if(key==="admin"){const code=(prompt("Podaj kod administratora:")||"").trim();if(code!==ADMIN_CODE){toast("Zły kod.");return;}}setPlan(key);};
     card.appendChild(btn);grid.appendChild(card);
   });
 }
-// bramkowanie: podmieniamy handlery przycisków na wersje sprawdzające plan
 Object.entries(GATED_BUTTONS).forEach(([id,feat])=>{
   const el=$(id);if(!el)return;const orig=el.onclick;
   el.onclick=e=>{if(!can(feat)){openPlans(feat);return;}if(orig)orig.call(el,e);};
@@ -1756,62 +1599,44 @@ $("addTrackBtn").onclick=async()=>{
   const logged = typeof fauth!=="undefined" && fauth && fauth.currentUser;
   const savedWhere=[];
   if(hasContent){
-    if(!confirm("Utworzyć nową trasę od zera?\n\nBieżąca zostanie automatycznie zapisana"+(logged?" w chmurze i lokalnie.":" lokalnie w tej przeglądarce.")+(inRoom?"\n(Wyjdziesz z pokoju współpracy.)":""))) return;
-    // Auto-save lokalnie (zawsze)
-    try{ if(saveCurrentLocal(true)) savedWhere.push("lokalnie"); }catch(e){ console.warn("Local:",e); }
-    // Auto-save w chmurze (jeśli zalogowany)
+    if(!confirm("Utworzyć nową trasę? Zapiszemy bieżącą.")) return;
+    try{ if(saveCurrentLocal(true)) savedWhere.push("lokalnie"); }catch(e){}
     if(logged){
       try{
         const data=serialize();
         const id="track_"+Date.now();
         await fdb.ref("users/"+fauth.currentUser.uid+"/projects/"+id).set({id,timestamp:Date.now(),name:data.name||"Bez nazwy",data});
         savedWhere.push("w chmurze");
-      }catch(e){ console.warn("Cloud:",e); }
+      }catch(e){}
     }
   }
-  // ZAWSZE twardy reload na czysty URL — gwarantuje 100% świeży stan (bez stale cache/state)
   try{ localStorage.removeItem("planer_autosave"); }catch(e){}
   if(inRoom){
     try{ if(typeof roomRef!=="undefined"&&roomRef) roomRef.off(); }catch(e){}
     try{ if(typeof presRef!=="undefined"&&presRef) presRef.off(); }catch(e){}
     try{ if(typeof myPresRef!=="undefined"&&myPresRef) myPresRef.remove(); }catch(e){}
   }
-  if(savedWhere.length){
-    try{ sessionStorage.setItem("planer_flash","✓ Zapisano poprzednią "+savedWhere.join(" i ")+". Zaczynaj nową!"); }catch(e){}
-  } else {
-    try{ sessionStorage.setItem("planer_flash","✏️ Świeży projekt — klikaj mapę."); }catch(e){}
-  }
   location.assign(location.origin + location.pathname);
 };
 
-// ========== PROJEKTY LOKALNE (bez logowania, localStorage) ==========
 const LOCAL_PROJECTS_KEY="planer_local_projects";
-function getLocalProjects(){
-  try{ const raw=localStorage.getItem(LOCAL_PROJECTS_KEY); return raw?JSON.parse(raw):[]; }catch(e){ return []; }
-}
-function setLocalProjectsRaw(arr){
-  try{ localStorage.setItem(LOCAL_PROJECTS_KEY, JSON.stringify(arr)); return true; }
-  catch(e){ toast("Za mało miejsca w przeglądarce. Usuń stare trasy lokalne."); return false; }
-}
+function getLocalProjects(){try{const raw=localStorage.getItem(LOCAL_PROJECTS_KEY);return raw?JSON.parse(raw):[];}catch(e){return[];}}
+function setLocalProjectsRaw(arr){try{localStorage.setItem(LOCAL_PROJECTS_KEY,JSON.stringify(arr));return true;}catch(e){toast("Za mało miejsca.");return false;}}
 function saveCurrentLocal(silent){
   const data=serialize();
   const hasContent=(data.tracks||[]).some(t=>(t.stops||[]).length>=1) || (data.pois||[]).length;
-  if(!hasContent){ if(!silent) toast("Nic do zapisania — trasa jest pusta."); return false; }
+  if(!hasContent){if(!silent)toast("Brak trasy do zapisu.");return false;}
   const list=getLocalProjects();
   const id="local_"+Date.now()+"_"+Math.random().toString(36).slice(2,7);
   list.unshift({id, timestamp:Date.now(), name:data.name||"Bez nazwy", data});
   if(list.length>30) list.length=30;
-  if(setLocalProjectsRaw(list)){
-    if(!silent) toast("Zapisano lokalnie ✓");
-    renderLocalProjects();
-    return true;
-  }
+  if(setLocalProjectsRaw(list)){if(!silent)toast("Zapisano lokalnie ✓");renderLocalProjects();return true;}
   return false;
 }
 function renderLocalProjects(){
   const box=$("localTracksList"); if(!box) return;
   const list=getLocalProjects();
-  if(!list.length){ box.innerHTML='<div class="empty">Jeszcze nie masz projektów lokalnych. Kliknij „Zapisz bieżącą trasę lokalnie".</div>'; return; }
+  if(!list.length){box.innerHTML='<div class="empty">Brak zapisanych projektów.</div>';return;}
   box.innerHTML="";
   list.forEach(p=>{
     const dt=p.timestamp? new Date(p.timestamp).toLocaleString("pl-PL",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}):"";
@@ -1824,36 +1649,24 @@ function renderLocalProjects(){
 }
 async function loadLocalProjectById(id){
   const p=getLocalProjects().find(x=>x.id===id);
-  if(!p){ toast("Nie znaleziono."); return; }
-  const hasContent=tracks.some(t=>t.stops && t.stops.some(s=>s.latlng)) || pois.length;
-  if(hasContent){
-    if(!confirm("Wczytać „"+(p.name||"Bez nazwy")+"”?\nBieżąca trasa zostanie zamknięta (zapisz ją najpierw jeśli chcesz zachować).")) return;
-  }
+  if(!p) return;
   await loadProject(p.data);
-  toast("Wczytano „"+(p.name||"Bez nazwy")+"” ✓");
+  toast("Wczytano ✓");
 }
 function deleteLocalProjectById(id, name){
-  if(!confirm('Usunąć „'+(name||"Bez nazwy")+'” z projektów lokalnych?\nTej operacji nie da się cofnąć.')) return;
+  if(!confirm('Usunąć "'+(name||"Bez nazwy")+'"?')) return;
   const list=getLocalProjects().filter(p=>p.id!==id);
   setLocalProjectsRaw(list);
   renderLocalProjects();
   toast("Usunięto.");
 }
 $("saveLocalBtn").onclick=()=>saveCurrentLocal(false);
-// Pierwszy render po chwili (żeby DOM był gotowy)
 setTimeout(renderLocalProjects, 200);
-// Flash message po reloadzie z "+ Nowa trasa"
-try{
-  const flash=sessionStorage.getItem("planer_flash");
-  if(flash){ sessionStorage.removeItem("planer_flash"); setTimeout(()=>toast(flash), 700); }
-}catch(e){}
-try{const savedName=localStorage.getItem("planer_name");if(savedName&&$("liveName"))$("liveName").value=savedName;}catch(e){}
 loadFromHash();
 if(getRoom()&&FIREBASE_CONFIG.apiKey&&can("live"))startLive();
 
-// ---------- PWA: instalacja jako aplikacja ----------
 $("refreshBtn").onclick=async()=>{
-  toast("Odświeżam aplikację…");
+  toast("Odświeżam…");
   try{if("serviceWorker" in navigator){const regs=await navigator.serviceWorker.getRegistrations();for(const r of regs)await r.unregister();}}catch(e){}
   try{if("caches" in window){const ks=await caches.keys();await Promise.all(ks.map(k=>caches.delete(k)));}}catch(e){}
   location.reload();
@@ -1861,16 +1674,8 @@ $("refreshBtn").onclick=async()=>{
 let deferredPrompt=null;
 window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();deferredPrompt=e;$("installGroup").style.display="block";});
 $("installBtn").onclick=async()=>{if(!deferredPrompt)return;deferredPrompt.prompt();await deferredPrompt.userChoice;deferredPrompt=null;$("installGroup").style.display="none";};
-window.addEventListener("appinstalled",()=>{$("installGroup").style.display="none";toast("Zainstalowano aplikację ✓");});
-// iOS nie wspiera beforeinstallprompt — pokaż instrukcję "Dodaj do ekranu początkowego"
-(function(){
-  const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
-  const standalone=window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone===true;
-  if(isIOS&&!standalone)$("iosHintGroup").style.display="block";
-})();
-// ==========================================================
-// ANIMACJA TRASY NA MAPIE + TRYB PREZENTACJI + EMBED
-// ==========================================================
+window.addEventListener("appinstalled",()=>{$("installGroup").style.display="none";toast("Zainstalowano ✓");});
+
 function animBuildFullPath(){
   const path=[]; let cum=0;
   tracks.forEach((t,ti)=>{
@@ -1892,7 +1697,6 @@ function animPointAtMeters(path,target){
   const a=path[lo], b=path[hi]; const seg=b.dist-a.dist||1; const t=(target-a.dist)/seg;
   return {lat:a.lat+(b.lat-a.lat)*t, lng:a.lng+(b.lng-a.lng)*t, color:b.color, trackIdx:b.trackIdx, trackName:b.trackName};
 }
-// Dedykowany pane dla markera animacji (przetrwa ukrycie zwykłych markerów w trybie embed)
 function ensureAnimPane(){
   if(!map.getPane("anim")){
     map.createPane("anim");
@@ -1900,7 +1704,6 @@ function ensureAnimPane(){
   }
   return "anim";
 }
-// Dedykowany pane dla „odkrytego" świecącego śladu w embed
 function ensureRevealPane(){
   if(!map.getPane("reveal")){
     map.createPane("reveal");
@@ -1909,14 +1712,12 @@ function ensureRevealPane(){
   return "reveal";
 }
 
-let mapAnim={marker:null, rafId:null, startedAt:0, duration:20000, origBadge:"", loop:false, mode:"editor", revealLine:null, darkVeil:null, revealedIdx:0};
+let mapAnim={marker:null, rafId:null, startedAt:0, duration:35000, origBadge:"", loop:false, mode:"editor", revealLine:null, darkVeil:null, revealedIdx:0};
 function playOnMap(mode){
-  // mode: "editor" | "viewer" | "embed"
   mode=mode||"editor";
   if(mapAnim.rafId){ stopOnMap(); if(!mapAnim.loop) return; }
   const {path,total}=animBuildFullPath();
-  if(!path.length||total<1){ if(mode==="editor") toast("Brak trasy do odtworzenia."); return; }
-  // Dopasowanie widoku — embed najbliżej, viewer średnio, editor delikatnie
+  if(!path.length||total<1){ if(mode==="editor") toast("Brak trasy."); return; }
   try{
     map.invalidateSize();
     const b=L.latLngBounds(path.map(p=>[p.lat,p.lng]));
@@ -1931,7 +1732,6 @@ function playOnMap(mode){
     icon:L.divIcon({className:"",iconSize:[26,26],iconAnchor:[13,13],html:'<div class="anim-marker"></div>'}),
     interactive:false, zIndexOffset:10000
   }).addTo(map);
-  // === EMBED / VIEWER: rysujący się jasny ślad + follow-marker + zoom 17 ===
   if(mode==="embed" || mode==="viewer"){
     if(!mapAnim.darkVeil && mode==="embed"){
       mapAnim.darkVeil=document.createElement("div");
@@ -1946,16 +1746,14 @@ function playOnMap(mode){
       lineCap:"round", lineJoin:"round"
     }).addTo(map);
     mapAnim.revealedIdx=0;
-    // Zoom in do startu — mapa będzie potem follow-marker
     try{ map.setView([path[0].lat,path[0].lng], 17, {animate:false}); }catch(e){}
   }
   const km=total/1000;
-  // Wolniejsza animacja: 5km=35s, 10km=55s (2x wolniej niż poprzednio)
-  mapAnim.duration=Math.round(1000*Math.max(20,Math.min(70, 15+km*4)));
+  // Wolniejszy, płynny czas animacji (np. ok. 45-75 sekund w zależności od km)
+  mapAnim.duration=Math.round(1000*Math.max(30,Math.min(90, 22+km*6)));
   mapAnim.startedAt=performance.now();
   mapAnim.mode=mode;
-  mapAnim.loop=(mode==="embed"); // embed zapętla się w kółko
-  // UI feedback
+  mapAnim.loop=(mode==="embed");
   const db=$("distBadge"); mapAnim.origBadge=db? db.textContent:"";
   const btn=$("playRouteBtn"); if(btn){ btn.dataset.orig=btn.textContent; btn.textContent="⏹ Zatrzymaj"; }
   const vbtn=$("viewerPlayBtn"); if(vbtn){ vbtn.dataset.orig=vbtn.textContent; vbtn.textContent="⏹ Zatrzymaj"; vbtn.classList.add("playing"); }
@@ -1967,7 +1765,6 @@ function playOnMap(mode){
     const dist=total*progress;
     const pos=animPointAtMeters(path,dist);
     if(mapAnim.marker) mapAnim.marker.setLatLng([pos.lat,pos.lng]);
-    // === EMBED / VIEWER: rozszerz linię do bieżącego punktu ===
     if((mode==="embed"||mode==="viewer") && mapAnim.revealLine){
       while(mapAnim.revealedIdx+1 < path.length && path[mapAnim.revealedIdx+1].dist <= dist){
         mapAnim.revealedIdx++;
@@ -1983,7 +1780,6 @@ function playOnMap(mode){
           mapAnim.revealLine.addLatLng([pos.lat,pos.lng]);
         }
       }
-      // Follow marker — mapa "leci" za pinezką
       try{ map.panTo([pos.lat,pos.lng],{animate:false,noMoveStart:true}); }catch(e){}
     }
     if(db){
@@ -1999,7 +1795,6 @@ function playOnMap(mode){
         const tot=(total/1000).toFixed(2).replace(".",",");
         sk.textContent=cur+" / "+tot;
       }
-      // Aktualna ulica (tylko update DOM gdy się zmieniła)
       const streetsEl=$("embedStreets");
       if(streetsEl && mapAnim.streetSegments){
         const cur=currentStreetAt(mapAnim.streetSegments, dist);
@@ -2018,10 +1813,8 @@ function playOnMap(mode){
     } else {
       mapAnim.rafId=null;
       if(mapAnim.loop){
-        // Pauza 1.5 s po ukończeniu, potem od nowa
         setTimeout(()=>{
           if(!mapAnim.rafId && document.body.classList.contains("embed-mode")){
-            // Wyczyść odkryty ślad przed nowym cyklem (żeby narysował się od zera)
             if(mapAnim.revealLine){ map.removeLayer(mapAnim.revealLine); mapAnim.revealLine=null; }
             playOnMap(mode);
           }
@@ -2034,7 +1827,6 @@ function playOnMap(mode){
           if(mapAnim.marker){ map.removeLayer(mapAnim.marker); mapAnim.marker=null; }
           if(mapAnim.revealLine){ map.removeLayer(mapAnim.revealLine); mapAnim.revealLine=null; }
           if(db) db.textContent=mapAnim.origBadge;
-          if(mode==="viewer" && typeof viewerUpdateMeta==="function") viewerUpdateMeta();
         }, 3000);
       }
     }
@@ -2046,29 +1838,25 @@ function stopOnMap(){
   mapAnim.loop=false;
   if(mapAnim.marker){ map.removeLayer(mapAnim.marker); mapAnim.marker=null; }
   if(mapAnim.revealLine){ map.removeLayer(mapAnim.revealLine); mapAnim.revealLine=null; }
-  // Zasłona zostaje jeśli jesteśmy w embed mode
   if(mapAnim.darkVeil && !document.body.classList.contains("embed-mode")){ mapAnim.darkVeil.remove(); mapAnim.darkVeil=null; }
   const btn=$("playRouteBtn"); if(btn) btn.textContent=btn.dataset.orig||"▶️ Odtwórz trasę na mapie";
   const vbtn=$("viewerPlayBtn"); if(vbtn){ vbtn.textContent=vbtn.dataset.orig||"▶ Odtwórz trasę"; vbtn.classList.remove("playing"); }
   const ebtn=$("embedPlayBtn"); if(ebtn) ebtn.textContent="▶";
   const db=$("distBadge"); if(db && mapAnim.origBadge) db.textContent=mapAnim.origBadge;
-  if(document.body.classList.contains("viewer-mode") && typeof viewerUpdateMeta==="function") viewerUpdateMeta();
 }
 $("playRouteBtn").onclick=()=>playOnMap("editor");
 $("viewerPlayBtn").onclick=()=>playOnMap("viewer");
 $("embedPlayBtn") && ($("embedPlayBtn").onclick=()=>{ if(mapAnim.rafId){ stopOnMap(); } else { playOnMap("embed"); } });
 $("embedFitBtn") && ($("embedFitBtn").onclick=()=>{ try{ const {path}=animBuildFullPath(); if(path.length) map.fitBounds(L.latLngBounds(path.map(p=>[p.lat,p.lng])),{padding:[22,22],maxZoom:18}); }catch(e){} });
 
-// Link "tylko do oglądania" (viewer mode)
 $("viewerShareBtn").onclick=()=>{
   try{
     const enc=LZString.compressToEncodedURIComponent(JSON.stringify(serialize()));
     const url=location.origin+location.pathname+"#view="+enc;
     $("viewerShareLink").value=url; $("viewerShareWrap").style.display="block";
-    if(navigator.clipboard) navigator.clipboard.writeText(url).then(()=>toast("Link prezentacji skopiowany ✓")).catch(()=>toast("Link gotowy — skopiuj poniżej."));
-    else toast("Link gotowy — skopiuj poniżej.");
-    if(url.length>7000) toast("Uwaga: link jest bardzo długi.");
-  }catch(e){ toast("Nie udało się utworzyć linku prezentacji."); }
+    if(navigator.clipboard) navigator.clipboard.writeText(url).then(()=>toast("Link skopiowany ✓")).catch(()=>toast("Link gotowy."));
+    else toast("Link gotowy.");
+  }catch(e){ toast("Błąd linku."); }
 };
 $("viewerCopyBtn").onclick=async()=>{
   const i=$("viewerShareLink"); i.select();
@@ -2076,7 +1864,6 @@ $("viewerCopyBtn").onclick=async()=>{
   toast("Skopiowano.");
 };
 
-// Kod embed (do wklejenia na stronę www jako iframe)
 function buildEmbedUrl(){
   const enc=LZString.compressToEncodedURIComponent(JSON.stringify(serialize()));
   return location.origin+location.pathname+"#embed="+enc;
@@ -2087,9 +1874,8 @@ $("embedShareBtn").onclick=()=>{
     const projName=(($("projName").value||"trasa").replace(/"/g,"&quot;"));
     const iframe=`<iframe src="${url}" title="${projName}" width="100%" height="480" style="border:0;border-radius:12px;box-shadow:0 6px 20px rgba(0,0,0,.15)" loading="lazy" allowfullscreen></iframe>`;
     $("embedCode").value=iframe; $("embedShareWrap").style.display="block";
-    toast("Kod gotowy — skopiuj i wklej na stronę.");
-    if(url.length>7000) toast("Uwaga: kod jest duży (długi projekt).");
-  }catch(e){ toast("Nie udało się utworzyć kodu embed."); }
+    toast("Kod gotowy.");
+  }catch(e){ toast("Błąd kodu embed."); }
 };
 $("embedCopyBtn").onclick=async()=>{
   const t=$("embedCode"); t.select();
@@ -2101,7 +1887,7 @@ $("embedPreviewBtn").onclick=()=>{
 };
 
 // ==========================================================
-// EKSPORT WIDEO (pionowe 1080×1920, motyw FOR RUN) — do social mediów
+// EKSPORT WIDEO Z WYBOREM PRĘDKOŚCI
 // ==========================================================
 function vidPickMime(){
   if(typeof MediaRecorder==="undefined") return "";
@@ -2113,27 +1899,31 @@ async function exportRouteVideo(){
   const anyGeom=tracks.some(t=>t.geometry&&t.geometry.length>=2);
   if(!anyGeom){ toast("Najpierw narysuj trasę."); return; }
   const mime=vidPickMime();
-  if(!mime){ toast("Ta przeglądarka nie wspiera nagrywania wideo z canvas."); return; }
+  if(!mime){ toast("Przeglądarka nie wspiera nagrywania wideo."); return; }
+
+  // Sprawdź wybraną prędkość z rozwijanej listy
+  const speedPref = $("videoSpeedSelect") ? $("videoSpeedSelect").value : "normal";
+  // Tabela czasu trwania wideo (w milisekundach):
+  // "slow" = bardzo wolno (22 sekundy)
+  // "normal" = standardowe kinowe tempo (16 sekund)
+  // "fast" = szybkie (10 sekund)
+  const durationMap = { slow: 22000, normal: 16000, fast: 10000 };
+  const duration = durationMap[speedPref] || 16000;
+
   const btn=$("videoDownloadBtn"); const oldTxt=btn.textContent;
-  btn.disabled=true; btn.textContent="⏳ Pobieram mapy…";
+  btn.disabled=true; btn.textContent="⏳ Pobieram mapę…";
   try{
-    // Format pionowy 9:16 (Instagram Reels/Stories, TikTok)
     const CW=1080, CH=1920;
-    const HEADER_H=210;      // logo FOR RUN + nazwa
-    const STATS_H=350;       // duży licznik km + przewyższenie
-    const MAP_H=CH-HEADER_H-STATS_H; // 1360
-    // 1) Wyrenderuj kafle mapy do canvasu
+    const HEADER_H=210, STATS_H=350, MAP_H=CH-HEADER_H-STATS_H;
     const rendered=await renderStaticMap(CW,MAP_H);
-    if(!rendered){ toast("Nie mogę wyrenderować mapy."); return; }
+    if(!rendered){ toast("Błąd renderowania mapy."); return; }
     btn.textContent="⏳ Pobieram wysokości…";
     const elev=await fetchElevationStats().catch(()=>null);
-    // Spróbuj wczytać logo (może się nie udać z powodu CORS — wtedy fallback do tekstu)
     btn.textContent="⏳ Wczytuję logo…";
     const logoImg=await pngLoadImg("https://fortrun.pl/wp-content/uploads/2026/07/Projekt-bez-nazwy-97.png").catch(()=>null);
-    btn.textContent="🎥 Renderuję film…";
+    btn.textContent="🎥 Renderuję film ("+speedPref.toUpperCase()+")…";
     const {canvas:mapCanvas, toXY}=rendered;
     const {path,total}=animBuildFullPath();
-    // 2) Utwórz canvas wyjściowy + recorder
     const canvas=document.createElement("canvas");
     canvas.width=CW; canvas.height=CH;
     const ctx=canvas.getContext("2d");
@@ -2145,8 +1935,7 @@ async function exportRouteVideo(){
     let resolveDone; const done=new Promise(r=>resolveDone=r);
     rec.onstop=()=>resolveDone();
     rec.start(100);
-    // 3) Pętla animacji
-    const duration=16000; // 16 sek
+
     const startTime=performance.now();
     const projName=($("projName").value||"Trasa").trim();
     function frame(now){
@@ -2154,44 +1943,30 @@ async function exportRouteVideo(){
       const progress=Math.min(1, elapsed/duration);
       const dist=total*progress;
       const pos=animPointAtMeters(path,dist);
-      // === Tło ===
       ctx.fillStyle="#000"; ctx.fillRect(0,0,CW,CH);
-      // === HEADER: pasek z logo FOR RUN + nazwa ===
       ctx.fillStyle="#050810"; ctx.fillRect(0,0,CW,HEADER_H);
-      // Cienki pasek żółty na dole headera
       ctx.fillStyle="#fbbf24"; ctx.fillRect(0,HEADER_H-3,CW,3);
-      // Logo (obrazek) albo tekst-fallback
       if(logoImg && logoImg.naturalWidth>0){
         const targetH=90;
         const ratio=logoImg.naturalWidth/logoImg.naturalHeight;
         const w=Math.min(CW-80, targetH*ratio);
         const h=w/ratio;
         try{ ctx.drawImage(logoImg, (CW-w)/2, 40, w, h); }catch(e){
-          // Canvas tainted → nagrać się nie da; rysujemy tekst
           ctx.fillStyle="#fbbf24"; ctx.textAlign="center"; ctx.textBaseline="middle";
           ctx.font="900 76px 'Space Grotesk', system-ui, sans-serif";
-          try{ ctx.letterSpacing="10px"; }catch(_){}
           ctx.fillText("FOR RUN", CW/2, 90);
-          try{ ctx.letterSpacing="0"; }catch(_){}
         }
       } else {
         ctx.fillStyle="#fbbf24"; ctx.textAlign="center"; ctx.textBaseline="middle";
         ctx.font="900 76px 'Space Grotesk', system-ui, sans-serif";
-        try{ ctx.letterSpacing="10px"; }catch(e){}
         ctx.fillText("FOR RUN", CW/2, 90);
-        try{ ctx.letterSpacing="0"; }catch(e){}
       }
       ctx.font="600 28px 'Space Grotesk', system-ui, sans-serif";
       ctx.fillStyle="#8fa0b0";
       ctx.textAlign="center"; ctx.textBaseline="middle";
-      try{ ctx.letterSpacing="3px"; }catch(e){}
       ctx.fillText(projName.toUpperCase().slice(0,40), CW/2, 158);
-      try{ ctx.letterSpacing="0"; }catch(e){}
-      // === MAP ===
       ctx.drawImage(mapCanvas, 0, HEADER_H);
-      // Ciemna zasłona (żeby ślad żółty się wybijał)
       ctx.fillStyle="rgba(0,0,0,.88)"; ctx.fillRect(0,HEADER_H,CW,MAP_H);
-      // Trasa jako subtelny hint (żeby widz widział dokąd zmierza)
       ctx.save();
       ctx.globalAlpha=0.14;
       ctx.strokeStyle="#fff"; ctx.lineWidth=4; ctx.lineCap="round"; ctx.lineJoin="round";
@@ -2202,7 +1977,6 @@ async function exportRouteVideo(){
         ctx.stroke();
       });
       ctx.restore();
-      // Odkryty żółty ślad z poświatą
       ctx.save();
       ctx.shadowColor="#fbbf24"; ctx.shadowBlur=22;
       ctx.strokeStyle="#fbbf24"; ctx.lineWidth=8; ctx.lineCap="round"; ctx.lineJoin="round";
@@ -2214,14 +1988,12 @@ async function exportRouteVideo(){
         const px=p.x, py=p.y+HEADER_H;
         if(!started){ ctx.moveTo(px,py); started=true; } else ctx.lineTo(px,py);
       }
-      // Ostatni interpolowany segment do bieżącej pozycji
       if(started){
         const pxPos=toXY(pos.lat,pos.lng);
         ctx.lineTo(pxPos.x, pxPos.y+HEADER_H);
         ctx.stroke();
       }
       ctx.restore();
-      // Marker
       const pxPos=toXY(pos.lat,pos.lng);
       const mx=pxPos.x, my=pxPos.y+HEADER_H;
       const pulse=1+0.28*Math.sin(now/180);
@@ -2231,23 +2003,17 @@ async function exportRouteVideo(){
       ctx.beginPath(); ctx.arc(mx,my,24,0,Math.PI*2); ctx.fill();
       ctx.fillStyle="#fbbf24"; ctx.strokeStyle="#fff"; ctx.lineWidth=5;
       ctx.beginPath(); ctx.arc(mx,my,16,0,Math.PI*2); ctx.fill(); ctx.stroke();
-      // === STATS: dolny pasek z dużym licznikiem km ===
+      
       const statsY=HEADER_H+MAP_H;
       ctx.fillStyle="#050810"; ctx.fillRect(0,statsY,CW,STATS_H);
-      // Cienki pasek żółty na górze stats
       ctx.fillStyle="#fbbf24"; ctx.fillRect(0,statsY,CW,3);
-      // WIELKA liczba km
       ctx.fillStyle="#fbbf24"; ctx.textAlign="center"; ctx.textBaseline="middle";
       ctx.font="900 168px 'Space Grotesk', system-ui, sans-serif";
       const kmStr=(dist/1000).toFixed(2).replace(".",",");
       ctx.fillText(kmStr, CW/2, statsY+130);
-      // Etykieta pod spodem
       ctx.font="600 32px 'Space Grotesk', system-ui, sans-serif";
       ctx.fillStyle="#8fa0b0";
-      try{ ctx.letterSpacing="3px"; }catch(e){}
       ctx.fillText("KM  Z  "+(total/1000).toFixed(2).replace(".",",")+"  KM", CW/2, statsY+218);
-      try{ ctx.letterSpacing="0"; }catch(e){}
-      // Przewyższenie
       if(elev){
         ctx.font="700 44px 'Space Grotesk', system-ui, sans-serif";
         ctx.fillStyle="#fbbf24";
@@ -2256,24 +2022,21 @@ async function exportRouteVideo(){
       if(progress<1){
         requestAnimationFrame(frame);
       } else {
-        // Zatrzymaj klatkę mety na 1,2 s, potem zamknij nagranie
         setTimeout(()=>{ try{ rec.stop(); }catch(e){} }, 1200);
       }
     }
     requestAnimationFrame(frame);
-    // Poczekaj aż recorder skończy
     await done;
-    if(!chunks.length){ toast("Nagranie puste — spróbuj ponownie."); return; }
+    if(!chunks.length){ toast("Nagranie puste."); return; }
     const ext=mime.startsWith("video/mp4")?"mp4":"webm";
     const blob=new Blob(chunks,{type:mime});
     const a=document.createElement("a");
     const fn=(projName||"trasa").replace(/[^\w\-]+/g,"_")+"_forrun."+ext;
     a.href=URL.createObjectURL(blob); a.download=fn; a.click();
     setTimeout(()=>URL.revokeObjectURL(a.href),3000);
-    toast("Pobrano film ✓ ("+ext.toUpperCase()+", "+(blob.size/1024/1024).toFixed(1)+" MB)");
+    toast("Pobrano film ✓ ("+(blob.size/1024/1024).toFixed(1)+" MB)");
   }catch(err){
-    console.error(err);
-    toast("Błąd eksportu wideo: "+(err&&err.message||err));
+    toast("Błąd eksportu wideo");
   }finally{
     btn.disabled=false; btn.textContent=oldTxt;
     try{ updateStats(); }catch(e){}
@@ -2281,8 +2044,6 @@ async function exportRouteVideo(){
 }
 $("videoDownloadBtn").onclick=exportRouteVideo;
 
-
-// Meta pod tytułem viewer HUD
 function viewerUpdateMeta(){
   const vm=$("vhMeta"); if(!vm) return;
   const km=tracks.reduce((a,t)=>a+(t.meters||0),0)/1000;
@@ -2294,7 +2055,6 @@ function viewerUpdateMeta(){
 }
 $("vhFitBtn") && ($("vhFitBtn").onclick=()=>{ try{ fitToRoute(); }catch(e){} });
 
-// Aktywacja trybu prezentacji (#view=) lub embed (#embed=)
 async function activateViewerModeIfNeeded(){
   const h=location.hash||"";
   const isView=h.startsWith("#view="), isEmbed=h.startsWith("#embed=");
@@ -2311,7 +2071,6 @@ async function activateViewerModeIfNeeded(){
       viewerUpdateMeta();
       whenMapReady(()=>{ try{ fitToRoute(); setTimeout(fitToRoute,300); }catch(e){} });
     } else {
-      // embed — motyw FOR RUN
       document.body.classList.add("embed-mode");
       ensureAnimPane(); ensureRevealPane();
       if(!mapAnim.darkVeil){
@@ -2328,7 +2087,6 @@ async function activateViewerModeIfNeeded(){
       const sub=$("embedSubtitle"); if(sub) sub.textContent=nm;
       const totalKm=tracks.reduce((a,t)=>a+(t.meters||0),0)/1000;
       const sk=$("statKm"); if(sk) sk.textContent="0,00 / "+totalKm.toFixed(2).replace(".",",");
-      // Przewyższenie (async)
       try{
         fetchElevationStats().then(el=>{
           if(!el) return;
@@ -2336,13 +2094,11 @@ async function activateViewerModeIfNeeded(){
           if(val){ val.textContent="↑"+el.gain+"  ↓"+el.loss+" m"; val.style.display="block"; }
         }).catch(()=>{});
       }catch(e){}
-      // Ulice (async) — segmenty per dystans, do pokazywania „aktualnej" ulicy pod pinezką
       try{
         gatherStreetSegments().then(segs=>{
           mapAnim.streetSegments=segs||[];
           const el=$("embedStreets");
           if(el && segs && segs.length){
-            // Pokazuj pierwszą ulicę na starcie
             el.innerHTML="<b>Startujemy z</b>"+segs[0].name;
             el.style.display="block";
           }
@@ -2350,27 +2106,19 @@ async function activateViewerModeIfNeeded(){
       }catch(e){}
       whenMapReady(()=>setTimeout(()=>playOnMap("embed"), 800));
     }
-  }catch(e){ console.error(e); if(!isEmbed) toast("Nie udało się otworzyć podglądu."); }
+  }catch(e){ if(!isEmbed) toast("Błąd podglądu."); }
 }
 (function(){
   const h=location.hash||"";
   if(h.startsWith("#view=") || h.startsWith("#embed=")){
     setTimeout(activateViewerModeIfNeeded, 100);
   } else {
-    // Edytor: usuń klasy prezentacji jeśli zostały z poprzedniej sesji (przeciwdziała bugowi z niewidoczną trasą)
     document.body.classList.remove("viewer-mode","embed-mode");
   }
 })();
 
-// ==========================================================
-// LOGOWANIE, TRASY W CHMURZE, PANEL ADMINA
-// ==========================================================
-// ⚠️ WAŻNE: wpisz tu swój email, którego użyjesz do rejestracji jako administrator.
-//    Tylko to konto zobaczy pasek admina i statystyki wszystkich użytkowników.
-//    (dopasuj też do reguł bazy — patrz instrukcja od asystenta)
 const ADMIN_EMAIL = "ddcompany.kontakt@gmail.com";
 
-// Jednorazowa inicjalizacja Firebase (współdzielona przez auth, chmurę i live).
 function initFirebaseOnce(){
   if(!FIREBASE_CONFIG||!FIREBASE_CONFIG.apiKey) return false;
   try{
@@ -2378,12 +2126,12 @@ function initFirebaseOnce(){
     if(!fdb) fdb=firebase.database();
     if(!fauth && firebase.auth) fauth=firebase.auth();
     return true;
-  }catch(e){ console.error("Firebase init:",e); return false; }
+  }catch(e){ return false; }
 }
 
 const authOverlay=$("authOverlay"), adminOverlay=$("adminDetailsOverlay");
 $("openAuthBtn").onclick=()=>{
-  if(!initFirebaseOnce()){ toast("Firebase nie skonfigurowany."); return; }
+  if(!initFirebaseOnce()){ toast("Brak Firebase."); return; }
   refreshAuthUI();
   authOverlay.classList.add("show");
 };
@@ -2402,7 +2150,7 @@ function refreshAuthUI(){
   if(u){
     $("profileEmail").textContent=u.email||u.displayName||"(brak)";
     const dt=u.metadata&&u.metadata.creationTime? new Date(u.metadata.creationTime).toLocaleDateString("pl-PL") : "";
-    $("profileMeta").textContent=(dt?"Konto utworzone: "+dt:"")+(u.emailVerified?" · zweryfikowany":"");
+    $("profileMeta").textContent=(dt?"Utworzone: "+dt:"");
     $("profileAdminBlock").style.display=(u.email===ADMIN_EMAIL)?"block":"none";
   }
 }
@@ -2412,28 +2160,27 @@ $("loginBtn").onclick=async()=>{
   const em=$("authEmail").value.trim(), pw=$("authPassword").value;
   if(!em||!pw){ authErr("Podaj email i hasło."); return; }
   try{ await fauth.signInWithEmailAndPassword(em,pw); toast("Zalogowano ✓"); }
-  catch(e){ authErr("Błąd logowania: "+(e.message||e)); }
+  catch(e){ authErr("Błąd logowania"); }
 };
 $("registerBtn").onclick=async()=>{
   if(!initFirebaseOnce()) return;
   const em=$("authEmail").value.trim(), pw=$("authPassword").value;
   if(!em||pw.length<6){ authErr("Hasło min. 6 znaków."); return; }
   try{ await fauth.createUserWithEmailAndPassword(em,pw); toast("Konto utworzone ✓"); }
-  catch(e){ authErr("Błąd rejestracji: "+(e.message||e)); }
+  catch(e){ authErr("Błąd rejestracji"); }
 };
 $("googleLoginBtn").onclick=async()=>{
   if(!initFirebaseOnce()) return;
   try{
     const provider=new firebase.auth.GoogleAuthProvider();
     await fauth.signInWithPopup(provider);
-    toast("Zalogowano przez Google ✓");
-  }catch(e){ authErr("Google: "+(e.message||e)); }
+    toast("Zalogowano ✓");
+  }catch(e){ authErr("Google error"); }
 };
 $("logoutBtn").onclick=async()=>{
   try{ await fauth.signOut(); toast("Wylogowano."); }catch(e){}
 };
 
-// Reakcja na zmianę stanu logowania: buduje UI, ładuje trasy z chmury, uruchamia admina.
 if(initFirebaseOnce() && fauth){
   fauth.onAuthStateChanged(u=>{
     const logged=!!u;
@@ -2443,7 +2190,6 @@ if(initFirebaseOnce() && fauth){
     $("cloudRoutesGroup").style.display = logged? "block":"none";
     $("loginPromptGroup").style.display = logged? "none":"block";
     if(logged){
-      // Zapisz/odśwież swój wpis w bazie, żeby admin widział aktywność
       try{ fdb.ref("users/"+u.uid+"/profile").update({email:u.email||null, lastActive:Date.now(), createdAt: (u.metadata&&u.metadata.creationTime)? new Date(u.metadata.creationTime).getTime():Date.now()}); }catch(e){}
       loadCloudTracks();
       if(u.email===ADMIN_EMAIL){ document.body.classList.add("admin-active"); $("adminBanner").style.display="flex"; startAdminStats(); }
@@ -2458,16 +2204,15 @@ if(initFirebaseOnce() && fauth){
   });
 }
 
-// ---------- Trasy w chmurze (CRUD) ----------
 $("saveToCloudBtn").onclick=async()=>{
   const u=fauth && fauth.currentUser; if(!u){ toast("Zaloguj się."); return; }
   try{
     const data=serialize();
     const id="track_"+Date.now();
     await fdb.ref("users/"+u.uid+"/projects/"+id).set({id,timestamp:Date.now(),name:data.name||"Bez nazwy",data});
-    toast("Zapisano trasę w chmurze ✓");
+    toast("Zapisano w chmurze ✓");
     loadCloudTracks();
-  }catch(e){ toast("Błąd zapisu: "+(e.message||e)); }
+  }catch(e){ toast("Błąd zapisu w chmurze"); }
 };
 async function loadCloudTracks(){
   const u=fauth && fauth.currentUser; const box=$("cloudTracksList"); if(!u||!box) return;
@@ -2475,7 +2220,7 @@ async function loadCloudTracks(){
     const snap=await fdb.ref("users/"+u.uid+"/projects").orderByChild("timestamp").once("value");
     const data=snap.val()||{};
     const rows=Object.values(data).sort((a,b)=>(b.timestamp||0)-(a.timestamp||0));
-    if(!rows.length){ box.innerHTML='<div class="empty">Jeszcze nie masz zapisanych tras w chmurze.</div>'; return; }
+    if(!rows.length){ box.innerHTML='<div class="empty">Brak zapisanych tras.</div>'; return; }
     box.innerHTML="";
     rows.forEach(p=>{
       const dt=p.timestamp? new Date(p.timestamp).toLocaleString("pl-PL",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}):"";
@@ -2485,26 +2230,25 @@ async function loadCloudTracks(){
       const btnD=document.createElement("button"); btnD.className="del"; btnD.textContent="✕"; btnD.onclick=()=>cloudDeleteProject(p.id, p.name);
       el.appendChild(btnL); el.appendChild(btnD); box.appendChild(el);
     });
-  }catch(e){ box.innerHTML='<div class="empty">Nie mogę wczytać: '+(e.message||e)+'</div>'; }
+  }catch(e){ box.innerHTML='<div class="empty">Błąd wczytywania chmury</div>'; }
 }
 async function cloudLoadProject(id){
   const u=fauth.currentUser; if(!u) return;
   try{
     const snap=await fdb.ref("users/"+u.uid+"/projects/"+id+"/data").once("value");
-    const d=snap.val(); if(!d){ toast("Trasa nie znaleziona."); return; }
+    const d=snap.val(); if(!d){ toast("Nie znaleziono."); return; }
     await loadProject(d);
     authOverlay.classList.remove("show");
-    toast("Wczytano trasę z chmury ✓");
-  }catch(e){ toast("Błąd wczytywania: "+(e.message||e)); }
+    toast("Wczytano ✓");
+  }catch(e){ toast("Błąd wczytywania"); }
 }
 async function cloudDeleteProject(id, name){
-  if(!confirm('Usunąć trasę "'+(name||"Bez nazwy")+'" z chmury?')) return;
+  if(!confirm('Usunąć "'+(name||"Bez nazwy")+'" z chmury?')) return;
   const u=fauth.currentUser; if(!u) return;
   try{ await fdb.ref("users/"+u.uid+"/projects/"+id).remove(); loadCloudTracks(); toast("Usunięto."); }
-  catch(e){ toast("Błąd: "+(e.message||e)); }
+  catch(e){ toast("Błąd"); }
 }
 
-// ---------- Panel admina: pasek statystyk + szczegóły ----------
 let adminStatsRef=null, adminRoomsRef=null;
 function startAdminStats(){
   stopAdminStats();
@@ -2522,13 +2266,9 @@ function startAdminStats(){
     $("abUsers").textContent=uids.length;
     $("abTracks").textContent=allTracks;
     $("abRecent").textContent=active24;
-  }, err=>{
-    // Najprawdopodobniej brak uprawnień w regułach Firebase
-    $("abUsers").textContent="?"; $("abTracks").textContent="?"; $("abRecent").textContent="?";
-    console.warn("Admin stats:", err && err.message);
-  });
+  }, ()=>{});
   adminRoomsRef=fdb.ref("rooms");
-  adminRoomsRef.on("value",snap=>{ const r=snap.val()||{}; $("abRooms").textContent=Object.keys(r).length; }, ()=>{ $("abRooms").textContent="?"; });
+  adminRoomsRef.on("value",snap=>{ const r=snap.val()||{}; $("abRooms").textContent=Object.keys(r).length; }, ()=>{});
 }
 function stopAdminStats(){
   try{ if(adminStatsRef) adminStatsRef.off(); }catch(e){}
@@ -2537,18 +2277,17 @@ function stopAdminStats(){
 }
 async function openAdminDetails(){
   adminOverlay.classList.add("show");
-  const box=$("adminUsersList"); box.innerHTML='<div class="empty">Pobieram szczegóły…</div>';
+  const box=$("adminUsersList"); box.innerHTML='<div class="empty">Ładowanie…</div>';
   try{
     const snap=await fdb.ref("users").once("value");
     const users=snap.val()||{};
     const uids=Object.keys(users);
-    if(!uids.length){ box.innerHTML='<div class="empty">Brak użytkowników w bazie.</div>'; return; }
-    // sortuj po ostatniej aktywności
+    if(!uids.length){ box.innerHTML='<div class="empty">Brak użytkowników.</div>'; return; }
     uids.sort((a,b)=>{ const A=(users[a].profile&&users[a].profile.lastActive)||0; const B=(users[b].profile&&users[b].profile.lastActive)||0; return B-A; });
     box.innerHTML="";
     uids.forEach(uid=>{
       const u=users[uid]||{};
-      const email=(u.profile&&u.profile.email)||"(nieznany email)";
+      const email=(u.profile&&u.profile.email)||"(brak emaila)";
       const last=(u.profile&&u.profile.lastActive)? new Date(u.profile.lastActive).toLocaleString("pl-PL") : "—";
       const created=(u.profile&&u.profile.createdAt)? new Date(u.profile.createdAt).toLocaleDateString("pl-PL") : "—";
       const projs=u.projects? Object.values(u.projects) : [];
@@ -2557,20 +2296,17 @@ async function openAdminDetails(){
       row.innerHTML=`<div class="u-email">${email.replace(/</g,"&lt;")}${email===ADMIN_EMAIL?' <span style="color:var(--accent-2);font-size:10px;font-weight:700;margin-left:6px;padding:2px 6px;border:1px solid var(--accent);border-radius:99px">ADMIN</span>':''}</div><div class="u-meta">Utworzone: ${created} · Ostatnio: ${last} · Trasy: ${projs.length}</div>${projs.length?'<div class="u-tracks">'+trackNames+'</div>':''}`;
       box.appendChild(row);
     });
-  }catch(e){ box.innerHTML='<div class="empty">Brak uprawnień do odczytu — sprawdź reguły Firebase.<br><small>'+(e.message||e)+'</small></div>'; }
+  }catch(e){ box.innerHTML='<div class="empty">Brak uprawnień.</div>'; }
 }
 
 if("serviceWorker" in navigator){
   window.addEventListener("load",()=>{
     navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}).then(reg=>{
-      // Sprawdź aktualizację natychmiast po rejestracji
       reg.update().catch(()=>{});
-      // Nasłuchuj na nową wersję i przeładuj stronę automatycznie
       reg.addEventListener("updatefound",()=>{
         const nw=reg.installing; if(!nw) return;
         nw.addEventListener("statechange",()=>{
           if(nw.state==="activated" && navigator.serviceWorker.controller){
-            // Nowa wersja przejęła kontrolę — odśwież raz, żeby wczytać świeży kod
             location.reload();
           }
         });
@@ -2578,10 +2314,6 @@ if("serviceWorker" in navigator){
     }).catch(()=>{});
   });
 }
-// ===== ODPORNOSC NA UKRYTY KONTENER (iframe w zakladce / display:none) =====
-// Gdy mapa startuje w ukrytym elemencie, Leaflet mierzy 0x0 i rysuje sie pusta.
-// ResizeObserver wola invalidateSize gdy kontener dostanie realny rozmiar,
-// a whenMapReady() odracza pierwsze dopasowanie widoku i animacje embed.
 let _mapEverSized=false,_mapSizedCbs=[],_lastMapW=0,_lastMapH=0;
 function mapHasSize(){const el=map.getContainer();return el.clientWidth>0&&el.clientHeight>0;}
 function whenMapReady(cb){ if(mapHasSize()) cb(); else _mapSizedCbs.push(cb); }
