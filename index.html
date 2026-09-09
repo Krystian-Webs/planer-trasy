@@ -474,6 +474,8 @@
           <div class="row" style="margin-top:6px"><button class="btn" id="embedCopyBtn">📋 Kopiuj kod</button><button class="btn" id="embedPreviewBtn">👁 Podgląd</button></div>
         </div>
         <p class="hint">Wkleisz gotowy kod iframe na swoją stronę. Widz zobaczy sam kawałek mapy z linią trasy i pinezką jadącą w kółko — bez pinezek z numerami, bez panelu, bez kontrolek. Dla dwóch dystansów (5 km i 10 km) zrób dwa osobne projekty i wklej dwa iframe'y obok siebie.</p>
+        <button class="btn primary" id="videoDownloadBtn" disabled style="margin-top:8px">🎥 Pobierz film 1080×1920 (Instagram / TikTok)</button>
+        <p class="hint">Zapisze pionowy film ~16 s z animacją trasy w motywie FOR RUN: czarna mapa, żółty ślad, licznik km i przewyższenia. Gotowe do wrzucenia na Reels, Stories albo TikToka. Uwaga: renderowanie zajmuje ok. 20 sekund.</p>
         <button class="btn primary" id="pngBtn" disabled style="margin-top:8px">📸 Pobierz mapę jako PNG</button>
         <p class="hint">Obraz z trasą i listą ulic pod spodem — do wysłania jako załącznik lub wydrukowania. Bez ikon punktów.</p>
         <button class="btn primary" id="gpxBtn" disabled style="margin-top:8px">⬇ Pobierz plik GPX</button>
@@ -698,7 +700,7 @@ async function insertStopOnLine(latlng){
   toast("Dodano przystanek pomiędzy — kolejne przenumerowane.");
 }
 function drawKmMarkers(){if(kmLayer){map.removeLayer(kmLayer);kmLayer=null;}if(!showKm||lastGeometry.length<2)return;kmLayer=L.layerGroup().addTo(map);for(let km=1;km*1000<totalMeters;km++)L.marker(pointAtMeters(km*1000),{icon:L.divIcon({className:"kmlabel",html:`${km} km`,iconSize:null}),interactive:false}).addTo(kmLayer);}
-function updateStats(){syncActive();const sum=tracks.reduce((a,t)=>a+(t.meters||0),0);$("distVal").textContent=(sum/1000).toFixed(2).replace(".",",");const db=$("distBadge");if(db)db.textContent=(tracks.length>1?"📏 Suma: ":"📏 Trasa: ")+(sum/1000).toFixed(2).replace(".",",")+" km"+(tracks.length>1&&activeTrack?" (tu: "+(totalMeters/1000).toFixed(2).replace(".",",")+")":"");$("cpVal").textContent=pois.filter(p=>p.type==="checkpoint").length;$("poiCount").textContent=pois.length;$("listCount").textContent=pois.length;$("clearPoiBtn").disabled=pois.length===0;$("gpxBtn").disabled=lastGeometry.length<2&&pois.length===0;const _pngBtn=$("pngBtn");if(_pngBtn)_pngBtn.disabled=!tracks.some(t=>t.geometry&&t.geometry.length>=2);const _playBtn=$("playRouteBtn");if(_playBtn)_playBtn.disabled=!tracks.some(t=>t.geometry&&t.geometry.length>=2);try{updateTime();}catch(e){}}
+function updateStats(){syncActive();const sum=tracks.reduce((a,t)=>a+(t.meters||0),0);$("distVal").textContent=(sum/1000).toFixed(2).replace(".",",");const db=$("distBadge");if(db)db.textContent=(tracks.length>1?"📏 Suma: ":"📏 Trasa: ")+(sum/1000).toFixed(2).replace(".",",")+" km"+(tracks.length>1&&activeTrack?" (tu: "+(totalMeters/1000).toFixed(2).replace(".",",")+")":"");$("cpVal").textContent=pois.filter(p=>p.type==="checkpoint").length;$("poiCount").textContent=pois.length;$("listCount").textContent=pois.length;$("clearPoiBtn").disabled=pois.length===0;$("gpxBtn").disabled=lastGeometry.length<2&&pois.length===0;const _pngBtn=$("pngBtn");if(_pngBtn)_pngBtn.disabled=!tracks.some(t=>t.geometry&&t.geometry.length>=2);const _playBtn=$("playRouteBtn");if(_playBtn)_playBtn.disabled=!tracks.some(t=>t.geometry&&t.geometry.length>=2);const _vidBtn=$("videoDownloadBtn");if(_vidBtn)_vidBtn.disabled=!tracks.some(t=>t.geometry&&t.geometry.length>=2);try{updateTime();}catch(e){}}
 
 function addPoi(type,latlng,name){const id=idSeq++;const obj={id,type,latlng,name:name||"",note:""};obj.marker=L.marker(latlng,{icon:poiIcon(type),draggable:true}).addTo(map);obj.marker.on("dragend",()=>{obj.latlng=obj.marker.getLatLng();renderPoiList();});obj.marker.on("click",()=>openEditor(id));pois.push(obj);renderPoiList();updateStats();return obj;}
 function renderPoiList(){const el=$("poiList");if(pois.length===0){el.innerHTML='<div class="empty">Brak punktów. Wybierz typ powyżej i kliknij na mapie, albo rozmieść automatycznie.</div>';return;}const cps=pois.filter(p=>p.type==="checkpoint").map(p=>({p,km:kmAlong(p.latlng)??1e9})).sort((a,b)=>a.km-b.km);cps.forEach((x,i)=>x.p._cpNo=i+1);pois.forEach(p=>p.marker.setIcon(poiIcon(p.type,p.type==="checkpoint"?p._cpNo:null)));el.innerHTML="";Object.keys(POI).forEach(type=>{const group=pois.filter(p=>p.type===type);if(!group.length)return;const head=document.createElement("div");head.className="poiGroupHead";head.style.borderLeft="4px solid "+POI[type].color;head.style.paddingLeft="8px";head.innerHTML=`<span class="ic">${POI[type].ic}</span><span class="gl">${POI[type].label}</span><span class="count" style="background:${POI[type].color}">${group.length}</span>`;el.appendChild(head);const sorted=group.map(p=>({p,km:kmAlong(p.latlng)})).sort((a,b)=>(a.km??1e9)-(b.km??1e9));sorted.forEach(({p,km})=>{const def=POI[p.type].label+(p.type==="checkpoint"?" "+p._cpNo:"");const display=p.name||def;const kmTxt=km!=null?km.toFixed(2).replace(".",",")+" km":"—";const item=document.createElement("div");item.className="poiItem";item.dataset.id=p.id;item.innerHTML=`<div class="head"><span class="ic">${POI[p.type].ic}</span><span class="nm">${display.replace(/</g,"&lt;")}</span><span class="km">${kmTxt}</span><button class="del" title="Usuń">✕</button></div><div class="edit"><input type="text" class="fld" placeholder="Nazwa (np. ${def})" value="${(p.name||"").replace(/"/g,"&quot;")}"><textarea class="fld" placeholder="Notatka — obsada, sprzęt, godziny otwarcia">${(p.note||"").replace(/</g,"&lt;")}</textarea></div>`;item.querySelector(".head").onclick=ev=>{if(ev.target.classList.contains("del")){map.removeLayer(p.marker);pois=pois.filter(x=>x.id!==p.id);renderPoiList();updateStats();return;}item.classList.toggle("open");if(item.classList.contains("open"))map.panTo(p.latlng);};const ni=item.querySelector("input"),ta=item.querySelector("textarea");ni.oninput=()=>{p.name=ni.value;item.querySelector(".nm").textContent=p.name||def;};ta.oninput=()=>{p.note=ta.value;};el.appendChild(item);});});}
@@ -1650,7 +1652,8 @@ function stopOnMap(){
   mapAnim.loop=false;
   if(mapAnim.marker){ map.removeLayer(mapAnim.marker); mapAnim.marker=null; }
   if(mapAnim.revealLine){ map.removeLayer(mapAnim.revealLine); mapAnim.revealLine=null; }
-  if(mapAnim.darkVeil){ mapAnim.darkVeil.remove(); mapAnim.darkVeil=null; }
+  // Zasłona zostaje jeśli jesteśmy w embed mode
+  if(mapAnim.darkVeil && !document.body.classList.contains("embed-mode")){ mapAnim.darkVeil.remove(); mapAnim.darkVeil=null; }
   const btn=$("playRouteBtn"); if(btn) btn.textContent=btn.dataset.orig||"▶️ Odtwórz trasę na mapie";
   const vbtn=$("viewerPlayBtn"); if(vbtn){ vbtn.textContent=vbtn.dataset.orig||"▶ Odtwórz trasę"; vbtn.classList.remove("playing"); }
   const ebtn=$("embedPlayBtn"); if(ebtn) ebtn.textContent="▶";
@@ -1703,6 +1706,168 @@ $("embedPreviewBtn").onclick=()=>{
   try{ window.open(buildEmbedUrl(),"_blank","noopener"); }catch(e){}
 };
 
+// ==========================================================
+// EKSPORT WIDEO (pionowe 1080×1920, motyw FOR RUN) — do social mediów
+// ==========================================================
+function vidPickMime(){
+  if(typeof MediaRecorder==="undefined") return "";
+  const types=["video/mp4;codecs=h264","video/webm;codecs=vp9","video/webm;codecs=vp8","video/webm","video/mp4"];
+  for(const t of types){ try{ if(MediaRecorder.isTypeSupported(t)) return t; }catch(e){} }
+  return "";
+}
+async function exportRouteVideo(){
+  const anyGeom=tracks.some(t=>t.geometry&&t.geometry.length>=2);
+  if(!anyGeom){ toast("Najpierw narysuj trasę."); return; }
+  const mime=vidPickMime();
+  if(!mime){ toast("Ta przeglądarka nie wspiera nagrywania wideo z canvas."); return; }
+  const btn=$("videoDownloadBtn"); const oldTxt=btn.textContent;
+  btn.disabled=true; btn.textContent="⏳ Pobieram mapy…";
+  try{
+    // Format pionowy 9:16 (Instagram Reels/Stories, TikTok)
+    const CW=1080, CH=1920;
+    const HEADER_H=210;      // logo FOR RUN + nazwa
+    const STATS_H=350;       // duży licznik km + przewyższenie
+    const MAP_H=CH-HEADER_H-STATS_H; // 1360
+    // 1) Wyrenderuj kafle mapy do canvasu
+    const rendered=await renderStaticMap(CW,MAP_H);
+    if(!rendered){ toast("Nie mogę wyrenderować mapy."); return; }
+    btn.textContent="⏳ Pobieram wysokości…";
+    const elev=await fetchElevationStats().catch(()=>null);
+    btn.textContent="🎥 Renderuję film…";
+    const {canvas:mapCanvas, toXY}=rendered;
+    const {path,total}=animBuildFullPath();
+    // 2) Utwórz canvas wyjściowy + recorder
+    const canvas=document.createElement("canvas");
+    canvas.width=CW; canvas.height=CH;
+    const ctx=canvas.getContext("2d");
+    ctx.imageSmoothingEnabled=true; ctx.imageSmoothingQuality="high";
+    const stream=canvas.captureStream(30);
+    const chunks=[];
+    const rec=new MediaRecorder(stream,{mimeType:mime, videoBitsPerSecond:6_000_000});
+    rec.ondataavailable=e=>{ if(e.data && e.data.size>0) chunks.push(e.data); };
+    let resolveDone; const done=new Promise(r=>resolveDone=r);
+    rec.onstop=()=>resolveDone();
+    rec.start(100);
+    // 3) Pętla animacji
+    const duration=16000; // 16 sek
+    const startTime=performance.now();
+    const projName=($("projName").value||"Trasa").trim();
+    function frame(now){
+      const elapsed=now-startTime;
+      const progress=Math.min(1, elapsed/duration);
+      const dist=total*progress;
+      const pos=animPointAtMeters(path,dist);
+      // === Tło ===
+      ctx.fillStyle="#000"; ctx.fillRect(0,0,CW,CH);
+      // === HEADER: pasek z logo FOR RUN + nazwa ===
+      ctx.fillStyle="#050810"; ctx.fillRect(0,0,CW,HEADER_H);
+      // Cienki pasek żółty na dole headera
+      ctx.fillStyle="#fbbf24"; ctx.fillRect(0,HEADER_H-3,CW,3);
+      ctx.fillStyle="#fbbf24"; ctx.textAlign="center"; ctx.textBaseline="middle";
+      ctx.font="900 76px 'Space Grotesk', system-ui, sans-serif";
+      try{ ctx.letterSpacing="10px"; }catch(e){}
+      ctx.fillText("FOR RUN", CW/2, 90);
+      try{ ctx.letterSpacing="0"; }catch(e){}
+      ctx.font="600 28px 'Space Grotesk', system-ui, sans-serif";
+      ctx.fillStyle="#8fa0b0";
+      try{ ctx.letterSpacing="3px"; }catch(e){}
+      ctx.fillText(projName.toUpperCase().slice(0,40), CW/2, 158);
+      try{ ctx.letterSpacing="0"; }catch(e){}
+      // === MAP ===
+      ctx.drawImage(mapCanvas, 0, HEADER_H);
+      // Ciemna zasłona (żeby ślad żółty się wybijał)
+      ctx.fillStyle="rgba(0,0,0,.88)"; ctx.fillRect(0,HEADER_H,CW,MAP_H);
+      // Trasa jako subtelny hint (żeby widz widział dokąd zmierza)
+      ctx.save();
+      ctx.globalAlpha=0.14;
+      ctx.strokeStyle="#fff"; ctx.lineWidth=4; ctx.lineCap="round"; ctx.lineJoin="round";
+      tracks.forEach(t=>{
+        if(!t.geometry||t.geometry.length<2) return;
+        ctx.beginPath();
+        t.geometry.forEach((ll,i)=>{ const p=toXY(ll[0],ll[1]); const px=p.x, py=p.y+HEADER_H; if(i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py); });
+        ctx.stroke();
+      });
+      ctx.restore();
+      // Odkryty żółty ślad z poświatą
+      ctx.save();
+      ctx.shadowColor="#fbbf24"; ctx.shadowBlur=22;
+      ctx.strokeStyle="#fbbf24"; ctx.lineWidth=8; ctx.lineCap="round"; ctx.lineJoin="round";
+      let started=false;
+      ctx.beginPath();
+      for(let i=0;i<path.length;i++){
+        if(path[i].dist>dist) break;
+        const p=toXY(path[i].lat,path[i].lng);
+        const px=p.x, py=p.y+HEADER_H;
+        if(!started){ ctx.moveTo(px,py); started=true; } else ctx.lineTo(px,py);
+      }
+      // Ostatni interpolowany segment do bieżącej pozycji
+      if(started){
+        const pxPos=toXY(pos.lat,pos.lng);
+        ctx.lineTo(pxPos.x, pxPos.y+HEADER_H);
+        ctx.stroke();
+      }
+      ctx.restore();
+      // Marker
+      const pxPos=toXY(pos.lat,pos.lng);
+      const mx=pxPos.x, my=pxPos.y+HEADER_H;
+      const pulse=1+0.28*Math.sin(now/180);
+      ctx.fillStyle="rgba(251,191,36,.28)";
+      ctx.beginPath(); ctx.arc(mx,my,36*pulse,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle="rgba(251,191,36,.55)";
+      ctx.beginPath(); ctx.arc(mx,my,24,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle="#fbbf24"; ctx.strokeStyle="#fff"; ctx.lineWidth=5;
+      ctx.beginPath(); ctx.arc(mx,my,16,0,Math.PI*2); ctx.fill(); ctx.stroke();
+      // === STATS: dolny pasek z dużym licznikiem km ===
+      const statsY=HEADER_H+MAP_H;
+      ctx.fillStyle="#050810"; ctx.fillRect(0,statsY,CW,STATS_H);
+      // Cienki pasek żółty na górze stats
+      ctx.fillStyle="#fbbf24"; ctx.fillRect(0,statsY,CW,3);
+      // WIELKA liczba km
+      ctx.fillStyle="#fbbf24"; ctx.textAlign="center"; ctx.textBaseline="middle";
+      ctx.font="900 168px 'Space Grotesk', system-ui, sans-serif";
+      const kmStr=(dist/1000).toFixed(2).replace(".",",");
+      ctx.fillText(kmStr, CW/2, statsY+130);
+      // Etykieta pod spodem
+      ctx.font="600 32px 'Space Grotesk', system-ui, sans-serif";
+      ctx.fillStyle="#8fa0b0";
+      try{ ctx.letterSpacing="3px"; }catch(e){}
+      ctx.fillText("KM  Z  "+(total/1000).toFixed(2).replace(".",",")+"  KM", CW/2, statsY+218);
+      try{ ctx.letterSpacing="0"; }catch(e){}
+      // Przewyższenie
+      if(elev){
+        ctx.font="700 44px 'Space Grotesk', system-ui, sans-serif";
+        ctx.fillStyle="#fbbf24";
+        ctx.fillText("↑"+elev.gain+" M   ↓"+elev.loss+" M", CW/2, statsY+282);
+      }
+      if(progress<1){
+        requestAnimationFrame(frame);
+      } else {
+        // Zatrzymaj klatkę mety na 1,2 s, potem zamknij nagranie
+        setTimeout(()=>{ try{ rec.stop(); }catch(e){} }, 1200);
+      }
+    }
+    requestAnimationFrame(frame);
+    // Poczekaj aż recorder skończy
+    await done;
+    if(!chunks.length){ toast("Nagranie puste — spróbuj ponownie."); return; }
+    const ext=mime.startsWith("video/mp4")?"mp4":"webm";
+    const blob=new Blob(chunks,{type:mime});
+    const a=document.createElement("a");
+    const fn=(projName||"trasa").replace(/[^\w\-]+/g,"_")+"_forrun."+ext;
+    a.href=URL.createObjectURL(blob); a.download=fn; a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href),3000);
+    toast("Pobrano film ✓ ("+ext.toUpperCase()+", "+(blob.size/1024/1024).toFixed(1)+" MB)");
+  }catch(err){
+    console.error(err);
+    toast("Błąd eksportu wideo: "+(err&&err.message||err));
+  }finally{
+    btn.disabled=false; btn.textContent=oldTxt;
+    try{ updateStats(); }catch(e){}
+  }
+}
+$("videoDownloadBtn").onclick=exportRouteVideo;
+
+
 // Meta pod tytułem viewer HUD
 function viewerUpdateMeta(){
   const vm=$("vhMeta"); if(!vm) return;
@@ -1734,6 +1899,19 @@ async function activateViewerModeIfNeeded(){
     } else {
       // embed — motyw FOR RUN
       document.body.classList.add("embed-mode");
+      // Ciemna zasłona od razu (nie czekamy na start animacji)
+      ensureAnimPane(); ensureRevealPane();
+      if(!mapAnim.darkVeil){
+        mapAnim.darkVeil=document.createElement("div");
+        mapAnim.darkVeil.className="map-dark-veil";
+        map.getContainer().appendChild(mapAnim.darkVeil);
+      }
+      // Dopasuj widok do trasy od razu (żeby nie było flash z domyślnym widokiem)
+      try{
+        const all=[];
+        tracks.forEach(t=>{ if(t.geometry) t.geometry.forEach(g=>all.push([g[0],g[1]])); });
+        if(all.length>=2){ const b=L.latLngBounds(all); map.fitBounds(b,{padding:[10,10],maxZoom:19,animate:false}); }
+      }catch(e){}
       const nm=(data.name||"Trasa").trim();
       const sub=$("embedSubtitle"); if(sub) sub.textContent=nm;
       // Wypełnij licznik początkową sumą (0 / totalKm)
