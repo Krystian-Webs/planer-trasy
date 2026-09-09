@@ -250,8 +250,9 @@
   .admin-user-row .u-email{font-weight:600;font-size:13px;word-break:break-all}
   .admin-user-row .u-meta{font-size:11px;color:var(--ink-dim);margin-top:4px}
   .admin-user-row .u-tracks{margin-top:8px;padding-top:8px;border-top:1px solid var(--line-soft);font-size:12px;color:#c7d2dc}
-  /* viewer mode (tryb prezentacji dla uczestników) */
+  /* viewer mode (tryb prezentacji dla uczestników) — grayscale + reveal */
   body.viewer-mode #panel,body.viewer-mode #searchWrap,body.viewer-mode #adminBanner{display:none!important}
+  body.viewer-mode .leaflet-marker-pane,body.viewer-mode .leaflet-tooltip-pane,body.viewer-mode .leaflet-popup-pane{display:none!important}
   body.viewer-mode .leaflet-top.leaflet-right{top:calc(90px + var(--sat))!important}
   #viewerHud{display:none;position:fixed;top:calc(14px + var(--sat));left:14px;right:14px;z-index:1500;background:var(--panel);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:1px solid var(--line-soft);border-radius:14px;padding:12px 16px;color:var(--ink);box-shadow:var(--shadow);align-items:center;gap:12px}
   body.viewer-mode #viewerHud{display:flex}
@@ -261,6 +262,12 @@
   body.viewer-mode #viewerPlayBtn{display:block}
   #viewerPlayBtn:hover{filter:brightness(1.08);transform:translateX(-50%) scale(1.02)}
   #viewerPlayBtn.playing{background:var(--panel-solid);border:2px solid var(--accent)}
+  /* Grayscale monochromatyczna mapa dla trybów prezentacji */
+  body.embed-mode .leaflet-tile-pane,
+  body.viewer-mode .leaflet-tile-pane{filter:grayscale(1) brightness(.82) contrast(1.12);-webkit-filter:grayscale(1) brightness(.82) contrast(1.12)}
+  /* Bazowa linia trasy ukryta — widać tylko rysowany za pinezką ślad */
+  body.embed-mode .leaflet-overlay-pane,
+  body.viewer-mode .leaflet-overlay-pane{opacity:0!important}
   /* pulsing dot marker */
   .anim-marker{width:26px;height:26px;border-radius:50%;background:#ff6b1a;border:3px solid #fff;box-shadow:0 0 0 8px rgba(255,107,26,.28),0 3px 12px rgba(0,0,0,.5);animation:animPulse 1.2s ease-in-out infinite}
   @keyframes animPulse{0%,100%{box-shadow:0 0 0 8px rgba(255,107,26,.28),0 3px 12px rgba(0,0,0,.5)}50%{box-shadow:0 0 0 14px rgba(255,107,26,.14),0 3px 12px rgba(0,0,0,.5)}}
@@ -278,7 +285,9 @@
   .leaflet-reveal-pane{z-index:460!important;pointer-events:none;opacity:1!important}
   .leaflet-reveal-pane path{filter:drop-shadow(0 0 3px #fbbf24) drop-shadow(0 0 8px rgba(251,191,36,.75))}
   .map-dark-veil{position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.90);z-index:250;pointer-events:none}
-  body.embed-mode .anim-marker{background:#fbbf24;border:3px solid #fff;box-shadow:0 0 0 10px rgba(251,191,36,.35),0 0 24px #fbbf24,0 0 44px rgba(251,191,36,.65),0 3px 12px rgba(0,0,0,.9);animation:animPulseYellow 1.2s ease-in-out infinite}
+  /* Żółty świecący marker w trybach prezentacji */
+  body.embed-mode .anim-marker,
+  body.viewer-mode .anim-marker{background:#fbbf24;border:3px solid #fff;box-shadow:0 0 0 10px rgba(251,191,36,.35),0 0 24px #fbbf24,0 0 44px rgba(251,191,36,.65),0 3px 12px rgba(0,0,0,.9);animation:animPulseYellow 1.2s ease-in-out infinite}
   @keyframes animPulseYellow{0%,100%{box-shadow:0 0 0 10px rgba(251,191,36,.35),0 0 24px #fbbf24,0 0 44px rgba(251,191,36,.65),0 3px 12px rgba(0,0,0,.9)}50%{box-shadow:0 0 0 16px rgba(251,191,36,.20),0 0 32px #fbbf24,0 0 56px rgba(251,191,36,.85),0 3px 12px rgba(0,0,0,.9)}}
   /* LOGO — mocno wyeksponowane u góry mapy, bez pilla */
   #embedHeader{display:none;position:fixed;top:calc(18px + var(--sat));left:0;right:0;z-index:1500;text-align:center;pointer-events:none;padding:0 14px}
@@ -1664,9 +1673,9 @@ function playOnMap(mode){
     icon:L.divIcon({className:"",iconSize:[26,26],iconAnchor:[13,13],html:'<div class="anim-marker"></div>'}),
     interactive:false, zIndexOffset:10000
   }).addTo(map);
-  // === EMBED: ciemna zasłona + rysujący się jasny ślad + follow-marker ===
-  if(mode==="embed"){
-    if(!mapAnim.darkVeil){
+  // === EMBED / VIEWER: rysujący się jasny ślad + follow-marker + zoom 17 ===
+  if(mode==="embed" || mode==="viewer"){
+    if(!mapAnim.darkVeil && mode==="embed"){
       mapAnim.darkVeil=document.createElement("div");
       mapAnim.darkVeil.className="map-dark-veil";
       map.getContainer().appendChild(mapAnim.darkVeil);
@@ -1680,7 +1689,7 @@ function playOnMap(mode){
     }).addTo(map);
     mapAnim.revealedIdx=0;
     // Zoom in do startu — mapa będzie potem follow-marker
-    try{ map.setView([path[0].lat,path[0].lng], 16, {animate:false}); }catch(e){}
+    try{ map.setView([path[0].lat,path[0].lng], 17, {animate:false}); }catch(e){}
   }
   const km=total/1000;
   // Wolniejsza animacja: 5km=35s, 10km=55s (2x wolniej niż poprzednio)
@@ -1700,18 +1709,15 @@ function playOnMap(mode){
     const dist=total*progress;
     const pos=animPointAtMeters(path,dist);
     if(mapAnim.marker) mapAnim.marker.setLatLng([pos.lat,pos.lng]);
-    // === EMBED: rozszerz linię do bieżącego punktu ===
-    if(mode==="embed" && mapAnim.revealLine){
-      // dodaj wszystkie punkty ścieżki, które właśnie „minęliśmy" (efektywnie — nie iterujemy od zera)
+    // === EMBED / VIEWER: rozszerz linię do bieżącego punktu ===
+    if((mode==="embed"||mode==="viewer") && mapAnim.revealLine){
       while(mapAnim.revealedIdx+1 < path.length && path[mapAnim.revealedIdx+1].dist <= dist){
         mapAnim.revealedIdx++;
         mapAnim.revealLine.addLatLng([path[mapAnim.revealedIdx].lat, path[mapAnim.revealedIdx].lng]);
       }
-      // interpolowany „czoło" ostatniego segmentu
       const latlngs=mapAnim.revealLine.getLatLngs();
       const head=latlngs[latlngs.length-1];
       if(!head || Math.abs(head.lat-pos.lat)>1e-9 || Math.abs(head.lng-pos.lng)>1e-9){
-        // Zastąp ostatni (interpolowany) punkt lub dodaj nowy
         if(latlngs.length>mapAnim.revealedIdx+1){
           latlngs[latlngs.length-1]=L.latLng(pos.lat,pos.lng);
           mapAnim.revealLine.setLatLngs(latlngs);
@@ -1719,6 +1725,8 @@ function playOnMap(mode){
           mapAnim.revealLine.addLatLng([pos.lat,pos.lng]);
         }
       }
+      // Follow marker — mapa "leci" za pinezką
+      try{ map.panTo([pos.lat,pos.lng],{animate:false,noMoveStart:true}); }catch(e){}
     }
     if(db){
       const cur=(dist/1000).toFixed(2).replace(".",",");
@@ -1733,8 +1741,6 @@ function playOnMap(mode){
         const tot=(total/1000).toFixed(2).replace(".",",");
         sk.textContent=cur+" / "+tot;
       }
-      // Follow marker — mapa "leci" za pinezką
-      try{ map.panTo([pos.lat,pos.lng],{animate:false,noMoveStart:true}); }catch(e){}
       // Aktualna ulica (tylko update DOM gdy się zmieniła)
       const streetsEl=$("embedStreets");
       if(streetsEl && mapAnim.streetSegments){
@@ -1768,6 +1774,7 @@ function playOnMap(mode){
         if(ebtn) ebtn.textContent="▶";
         setTimeout(()=>{
           if(mapAnim.marker){ map.removeLayer(mapAnim.marker); mapAnim.marker=null; }
+          if(mapAnim.revealLine){ map.removeLayer(mapAnim.revealLine); mapAnim.revealLine=null; }
           if(db) db.textContent=mapAnim.origBadge;
           if(mode==="viewer" && typeof viewerUpdateMeta==="function") viewerUpdateMeta();
         }, 3000);
