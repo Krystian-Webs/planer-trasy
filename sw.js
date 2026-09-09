@@ -1,5 +1,4 @@
-// Service worker dla Planera Trasy — zaktualizowany na v40
-const CACHE = "planer-trasy-v40";
+const CACHE = "planer-trasy-v41";
 const SHELL = [
   "./",
   "index.html",
