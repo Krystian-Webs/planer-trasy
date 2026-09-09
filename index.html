@@ -740,7 +740,36 @@ document.addEventListener("click",e=>{if(!$("searchWrap").contains(e.target))sDr
 function serialize(){syncActive();return{v:4,name:$("projName").value,snap,activeTrack:activeTrack?activeTrack.id:null,tracks:tracks.map(t=>({id:t.id,name:t.name,color:t.color,stops:t.stops.filter(s=>s.latlng).map(s=>({lat:s.latlng.lat,lng:s.latlng.lng,address:s.address}))})),pois:pois.map(p=>({type:p.type,lat:p.latlng.lat,lng:p.latlng.lng,name:p.name,note:p.note}))};}
 $("saveBtn").onclick=()=>{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(serialize(),null,2)],{type:"application/json"}));a.download=($("projName").value||"projekt").replace(/[^\w-]+/g,"_")+".json";a.click();URL.revokeObjectURL(a.href);toast("Zapisano projekt ✓");};
 $("loadBtn").onclick=()=>$("fileInput").click();
-$("fileInput").onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{loadProject(JSON.parse(rd.result));toast("Wczytano projekt ✓");}catch(err){toast("Nie udało się wczytać pliku.");}};rd.readAsText(f);e.target.value="";};
+$("fileInput").onchange=async e=>{
+  const f=e.target.files[0];if(!f)return;
+  const rd=new FileReader();
+  rd.onerror=()=>{ toast("Nie udało się odczytać pliku (błąd systemu)."); };
+  rd.onload=async()=>{
+    let data;
+    try{ data=JSON.parse(rd.result); }
+    catch(err){ toast("Plik nie jest prawidłowym JSON — sprawdź czy nie jest uszkodzony."); console.error("JSON parse:",err); e.target.value=""; return; }
+    if(!data || typeof data!=="object"){ toast("Plik nie zawiera projektu (zły format)."); e.target.value=""; return; }
+    // Ile jest punktów łącznie (do walidacji)?
+    let totalStops=0;
+    if(data.tracks && data.tracks.length) data.tracks.forEach(t=>{ if(t.stops) totalStops+=t.stops.filter(s=>s && typeof s.lat==="number" && typeof s.lng==="number").length; });
+    else if(data.stops) totalStops=data.stops.filter(s=>s && typeof s.lat==="number" && typeof s.lng==="number").length;
+    else if(data.waypoints) totalStops=data.waypoints.filter(s=>s && typeof s.lat==="number" && typeof s.lng==="number").length;
+    const poiCount=(data.pois && data.pois.length)? data.pois.filter(p=>p && typeof p.lat==="number" && typeof p.lng==="number").length:0;
+    if(totalStops===0 && poiCount===0){
+      toast("Plik nie ma zapisanych punktów trasy — jest pusty.");
+      e.target.value=""; return;
+    }
+    try{
+      await loadProject(data);
+      toast("Wczytano ✓ ("+totalStops+" pkt trasy"+(poiCount?", "+poiCount+" punktów":"")+")");
+    }catch(err){
+      toast("Błąd wczytywania: "+(err && err.message || err));
+      console.error("loadProject error:",err);
+    }
+    e.target.value="";
+  };
+  rd.readAsText(f);
+};
 $("newBtn").onclick=()=>{if((stops.some(s=>s.latlng)||pois.length)&&!confirm("Wyczyścić bieżący projekt?"))return;clearAll();$("projName").value="Moje wydarzenie";toast("Nowy projekt");};
 function clearTracksFromMap(){tracks.forEach(t=>{if(t.line){map.removeLayer(t.line);t.line=null;}t.stops.forEach(s=>{if(s.marker){map.removeLayer(s.marker);s.marker=null;}});});}
 function clearAll(){clearTracksFromMap();tracks=[];trackSeq=1;pois.forEach(p=>map.removeLayer(p.marker));pois=[];activeTrack=newTrack();stops=activeTrack.stops;lastGeometry=[];totalMeters=0;renderTrackList();renderStops();rebuildRoute();}
@@ -750,8 +779,8 @@ async function loadProject(d,keepView){
   $("projName").value=d.name||"Wczytany projekt";
   if(typeof d.snap==="boolean"){snap=d.snap;$("snapToggle").classList.toggle("on",snap);}
   const trackDefs=(d.tracks&&d.tracks.length)?d.tracks:[{name:"Trasa 1",color:TRACK_COLORS[0],stops:(d.stops||d.waypoints||[])}];
-  trackDefs.forEach(td=>{const t=newTrack(td.name,td.color);if(td.id!=null){t.id=td.id;if(td.id>=idSeq)idSeq=td.id+1;}(td.stops||[]).forEach(w=>{const s={id:idSeq++,latlng:L.latLng(w.lat,w.lng),address:w.address||"",marker:null};t.stops.push(s);});});
-  (d.pois||[]).forEach(p=>{const o=addPoi(p.type,L.latLng(p.lat,p.lng),p.name);if(o)o.note=p.note||"";});
+  trackDefs.forEach(td=>{const t=newTrack(td.name,td.color);if(td.id!=null){t.id=td.id;if(td.id>=idSeq)idSeq=td.id+1;}(td.stops||[]).forEach(w=>{const lat=parseFloat(w.lat), lng=parseFloat(w.lng);if(!isFinite(lat)||!isFinite(lng))return;const s={id:idSeq++,latlng:L.latLng(lat,lng),address:w.address||"",marker:null};t.stops.push(s);});});
+  (d.pois||[]).forEach(p=>{const lat=parseFloat(p.lat), lng=parseFloat(p.lng);if(!isFinite(lat)||!isFinite(lng)||!p.type||!POI[p.type])return;const o=addPoi(p.type,L.latLng(lat,lng),p.name);if(o)o.note=p.note||"";});
   for(const t of tracks){const coords=t.stops.filter(s=>s.latlng).map(s=>s.latlng);t.geometry=[];t.meters=0;if(coords.length>=2){if(snap){const res=await fetchRoute(coords);if(res){t.meters=res.meters;t.geometry=res.geometry;}}if(t.geometry.length===0){t.geometry=coords.map(c=>[c.lat,c.lng]);for(let i=1;i<coords.length;i++)t.meters+=haversine(coords[i-1],coords[i]);}}}
   const wantId=(d.activeTrack&&tracks.find(t=>t.id===d.activeTrack))?d.activeTrack:tracks[0].id;
   activeTrack=tracks.find(t=>t.id===wantId);stops=activeTrack.stops;lastGeometry=activeTrack.geometry;totalMeters=activeTrack.meters;
