@@ -272,43 +272,52 @@
   body.embed-mode .leaflet-control-zoom,body.embed-mode .leaflet-control-layers{display:none!important}
   body.embed-mode .leaflet-control-attribution{font-size:9px!important;padding:1px 4px!important;background:rgba(0,0,0,.6)!important;color:#8fa0b0!important}
   body.embed-mode .leaflet-control-attribution a{color:#c7d2dc!important}
-  body.embed-mode #map{background:#000;top:8px;left:8px;right:8px;bottom:8px;border-radius:10px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,.5)}
-  /* Bazowe polilinie tras są (prawie) ukryte — pokazujemy je tylko jako subtelną wskazówkę */
+  body.embed-mode #map{background:#000;top:6px;left:6px;right:6px;bottom:6px;border-radius:10px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,.5)}
   body.embed-mode .leaflet-overlay-pane{opacity:.10}
-  /* Separatny pane dla markera animacji — nie ukrywa się z resztą markerów */
   .leaflet-anim-pane{z-index:650!important;pointer-events:none}
-  /* Separatny pane dla „odkrytego" świecącego śladu — rysowany NAD ciemną zasłoną */
   .leaflet-reveal-pane{z-index:460!important;pointer-events:none;opacity:1!important}
   .leaflet-reveal-pane path{filter:drop-shadow(0 0 3px #fbbf24) drop-shadow(0 0 8px rgba(251,191,36,.75))}
-  /* Ciemna zasłona nad mapą — pomiędzy tilesami (z 200) a overlay pane (z 400) */
   .map-dark-veil{position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.90);z-index:250;pointer-events:none}
-  /* Żółty marker w trybie embed */
   body.embed-mode .anim-marker{background:#fbbf24;border:3px solid #fff;box-shadow:0 0 0 10px rgba(251,191,36,.35),0 0 24px #fbbf24,0 0 44px rgba(251,191,36,.65),0 3px 12px rgba(0,0,0,.9);animation:animPulseYellow 1.2s ease-in-out infinite}
   @keyframes animPulseYellow{0%,100%{box-shadow:0 0 0 10px rgba(251,191,36,.35),0 0 24px #fbbf24,0 0 44px rgba(251,191,36,.65),0 3px 12px rgba(0,0,0,.9)}50%{box-shadow:0 0 0 16px rgba(251,191,36,.20),0 0 32px #fbbf24,0 0 56px rgba(251,191,36,.85),0 3px 12px rgba(0,0,0,.9)}}
-  /* Nagłówek FOR RUN — centralnie u góry */
-  #embedHeader{display:none;position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:1500;background:rgba(10,14,19,.92);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);padding:8px 20px;border-radius:14px;border:1px solid var(--line-soft);box-shadow:0 6px 24px rgba(0,0,0,.5);text-align:center}
+  /* LOGO — mocno wyeksponowane u góry mapy, bez pilla */
+  #embedHeader{display:none;position:fixed;top:calc(18px + var(--sat));left:0;right:0;z-index:1500;text-align:center;pointer-events:none;padding:0 14px}
   body.embed-mode #embedHeader{display:block}
-  #embedHeader .brand{display:block;height:36px;width:auto;max-width:200px;object-fit:contain;margin:0 auto}
-  #embedHeader .subtitle{font:500 11px var(--font);color:#8fa0b0;margin-top:6px;letter-spacing:1.2px;text-transform:uppercase;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  /* Licznik w prawym rogu — żółte cyfry */
-  #embedStats{display:none;position:fixed;top:14px;right:14px;z-index:1500;background:rgba(10,14,19,.92);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);padding:12px 16px;border-radius:12px;border:1px solid var(--line-soft);box-shadow:0 8px 24px rgba(0,0,0,.55);min-width:140px}
-  body.embed-mode #embedStats{display:block}
-  #embedStats .stat{margin-bottom:10px}
-  #embedStats .stat:last-child{margin-bottom:0}
-  #embedStats .v{color:#fbbf24;font:700 20px var(--font);font-variant-numeric:tabular-nums;letter-spacing:-.3px;line-height:1.1}
-  #embedStats .k{color:#8fa0b0;font:500 9.5px var(--font);text-transform:uppercase;letter-spacing:1.2px;margin-top:3px}
-  #embedCtrl{display:none;position:fixed;bottom:14px;right:14px;z-index:1500;background:rgba(20,26,34,.94);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid var(--line-soft);border-radius:99px;padding:5px 6px;gap:2px;box-shadow:var(--shadow-sm)}
+  #embedHeader .brand{height:64px;width:auto;max-width:75%;object-fit:contain;filter:drop-shadow(0 4px 14px rgba(0,0,0,.75)) drop-shadow(0 0 6px rgba(0,0,0,.9))}
+  /* INFO PANEL — dolny lewy róg, ciemne tło pod liczbami */
+  #embedInfo{display:none;position:fixed;bottom:calc(14px + var(--sab));left:14px;z-index:1500;background:rgba(5,8,12,.88);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-radius:14px;padding:14px 18px;border:1px solid rgba(251,191,36,.28);box-shadow:0 10px 30px rgba(0,0,0,.7);max-width:calc(100% - 118px);color:#fff}
+  body.embed-mode #embedInfo{display:block}
+  #embedInfo .ei-title{font:600 11px var(--font);color:#8fa0b0;text-transform:uppercase;letter-spacing:1.4px;margin-bottom:6px;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #embedInfo .ei-km{font:900 34px var(--font);color:#fbbf24;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.5px}
+  #embedInfo .ei-km .ei-unit{font:600 15px var(--font);color:#8fa0b0;margin-left:6px;letter-spacing:1px}
+  #embedInfo .ei-elev{font:700 15px var(--font);color:#fbbf24;margin-top:8px;font-variant-numeric:tabular-nums}
+  #embedInfo .ei-streets{font:500 11px var(--font);color:#c7d2dc;margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,.09);max-width:320px;line-height:1.45;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+  #embedInfo .ei-streets b{color:#fbbf24;font-weight:700;text-transform:uppercase;letter-spacing:.8px;font-size:9.5px;display:block;margin-bottom:4px}
+  #embedCtrl{display:none;position:fixed;bottom:calc(14px + var(--sab));right:14px;z-index:1500;background:rgba(5,8,12,.88);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid rgba(251,191,36,.28);border-radius:99px;padding:5px 6px;gap:2px;box-shadow:0 10px 30px rgba(0,0,0,.7)}
   body.embed-mode #embedCtrl{display:flex}
   #embedCtrl button{background:transparent;border:0;color:#fff;padding:8px 12px;font:600 12px var(--font);cursor:pointer;border-radius:99px;min-width:38px}
   #embedCtrl button:hover{background:rgba(255,255,255,.08)}
   #embedCtrl button.primary{background:linear-gradient(135deg,#fbbf24,#f59e0b);color:#0a0e13;font-weight:800}
-  #embedTitle{display:none;position:fixed;top:12px;left:12px;z-index:1500;background:rgba(20,26,34,.9);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);color:#fff;padding:8px 14px;border-radius:99px;font:700 13px var(--font);border:1px solid var(--line-soft);box-shadow:var(--shadow-sm);max-width:calc(100% - 120px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  /* Bardzo wąskie embed (np. na wąskim boxie): schowaj napisy w headerze, zostaw tylko brand */
-  @media (max-width:420px){
-    body.embed-mode #embedHeader{padding:6px 14px}
-    body.embed-mode #embedHeader .subtitle{display:none}
-    body.embed-mode #embedStats{padding:9px 12px;min-width:110px}
-    body.embed-mode #embedStats .v{font-size:16px}
+  #embedTitle{display:none;position:fixed;top:12px;left:12px;z-index:1500;background:rgba(20,26,34,.9);backdrop-filter:blur(14px);color:#fff;padding:8px 14px;border-radius:99px;font:700 13px var(--font);border:1px solid var(--line-soft);box-shadow:var(--shadow-sm);max-width:calc(100% - 120px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  /* Mobile responsive */
+  @media (max-width:520px){
+    body.embed-mode #map{top:4px;left:4px;right:4px;bottom:4px;border-radius:8px}
+    #embedHeader{top:calc(12px + var(--sat));padding:0 10px}
+    #embedHeader .brand{height:44px;max-width:60%}
+    #embedInfo{bottom:calc(10px + var(--sab));left:10px;padding:10px 14px;max-width:calc(100% - 92px);border-radius:12px}
+    #embedInfo .ei-title{font-size:10px;letter-spacing:1.1px;margin-bottom:4px}
+    #embedInfo .ei-km{font-size:26px}
+    #embedInfo .ei-km .ei-unit{font-size:13px}
+    #embedInfo .ei-elev{font-size:13px;margin-top:6px}
+    #embedInfo .ei-streets{margin-top:8px;padding-top:8px;font-size:10px;-webkit-line-clamp:1}
+    #embedCtrl{bottom:calc(10px + var(--sab));right:10px;padding:4px 5px}
+    #embedCtrl button{padding:7px 9px;font-size:11px;min-width:32px}
+  }
+  @media (max-width:360px){
+    #embedHeader .brand{height:36px}
+    #embedInfo{padding:8px 11px;max-width:calc(100% - 82px)}
+    #embedInfo .ei-km{font-size:22px}
+    #embedInfo .ei-streets{display:none}
   }
 </style>
 </head>
@@ -549,17 +558,12 @@
   <div id="embedTitle">Trasa</div>
   <div id="embedHeader">
     <img class="brand" id="brandLogo" src="https://fortrun.pl/wp-content/uploads/2026/07/Projekt-bez-nazwy-97.png" alt="For Run">
-    <div class="subtitle" id="embedSubtitle">Trasa</div>
   </div>
-  <div id="embedStats">
-    <div class="stat">
-      <div class="v" id="statKm">0,00 / 0,00</div>
-      <div class="k">km</div>
-    </div>
-    <div class="stat" id="statElevBox" style="display:none">
-      <div class="v" id="statElev">↑— m</div>
-      <div class="k">przewyższenie</div>
-    </div>
+  <div id="embedInfo">
+    <div class="ei-title" id="embedSubtitle">Trasa</div>
+    <div class="ei-km"><span id="statKm">0,00 / 0,00</span> <span class="ei-unit">km</span></div>
+    <div class="ei-elev" id="statElev" style="display:none">↑— ↓— m</div>
+    <div class="ei-streets" id="embedStreets" style="display:none">—</div>
   </div>
   <div id="embedCtrl">
     <button id="embedPlayBtn" class="primary" title="Odtwórz / pauza">▶</button>
@@ -1975,14 +1979,12 @@ async function activateViewerModeIfNeeded(){
     } else {
       // embed — motyw FOR RUN
       document.body.classList.add("embed-mode");
-      // Ciemna zasłona od razu (nie czekamy na start animacji)
       ensureAnimPane(); ensureRevealPane();
       if(!mapAnim.darkVeil){
         mapAnim.darkVeil=document.createElement("div");
         mapAnim.darkVeil.className="map-dark-veil";
         map.getContainer().appendChild(mapAnim.darkVeil);
       }
-      // Dopasuj widok do trasy od razu (żeby nie było flash z domyślnym widokiem)
       try{
         const all=[];
         tracks.forEach(t=>{ if(t.geometry) t.geometry.forEach(g=>all.push([g[0],g[1]])); });
@@ -1990,19 +1992,28 @@ async function activateViewerModeIfNeeded(){
       }catch(e){}
       const nm=(data.name||"Trasa").trim();
       const sub=$("embedSubtitle"); if(sub) sub.textContent=nm;
-      // Wypełnij licznik początkową sumą (0 / totalKm)
       const totalKm=tracks.reduce((a,t)=>a+(t.meters||0),0)/1000;
       const sk=$("statKm"); if(sk) sk.textContent="0,00 / "+totalKm.toFixed(2).replace(".",",");
-      // Pobierz przewyższenie (async, uzupełnij gdy będzie)
+      // Przewyższenie (async)
       try{
         fetchElevationStats().then(el=>{
           if(!el) return;
-          const box=$("statElevBox"), val=$("statElev");
-          if(val) val.textContent="↑"+el.gain+" ↓"+el.loss+" m";
-          if(box) box.style.display="block";
+          const val=$("statElev");
+          if(val){ val.textContent="↑"+el.gain+"  ↓"+el.loss+" m"; val.style.display="block"; }
         }).catch(()=>{});
       }catch(e){}
-      // Auto-play w pętli po chwili (żeby kafle się załadowały)
+      // Ulice (async) — pokaż listę pod przewyższeniem
+      try{
+        gatherStreetNames().then(streets=>{
+          if(!streets||!streets.length) return;
+          const el=$("embedStreets");
+          if(el){
+            const list=streets.slice(0,10).join(" · ")+(streets.length>10?" · +"+(streets.length-10):"");
+            el.innerHTML="<b>Ulice na trasie</b>"+list;
+            el.style.display="block";
+          }
+        }).catch(()=>{});
+      }catch(e){}
       setTimeout(()=>playOnMap("embed"), 1200);
     }
   }catch(e){ console.error(e); if(!isEmbed) toast("Nie udało się otworzyć podglądu."); }
