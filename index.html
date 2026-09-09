@@ -821,59 +821,64 @@ async function fetchRoute(coords){
 function redrawAllTrackLines(){tracks.forEach(t=>{if(t.line){map.removeLayer(t.line);t.line=null;}if(t.geometry&&t.geometry.length>=2){const isAct=activeTrack&&t.id===activeTrack.id;t.line=L.polyline(t.geometry,{color:t.color,weight:isAct?6:4,opacity:isAct?.95:.55,lineJoin:"round",interactive:false}).addTo(map);t.line.bringToBack();}});}
 let _rebuildGen=0;
 async function rebuildRoute(){
-  const myGen=++_rebuildGen;
-  let localGeom=[]; let localMeters=0;
-  try{
-    const coords=stops.filter(s=>s && s.latlng && typeof s.latlng.lat==="number" && typeof s.latlng.lng==="number" && isFinite(s.latlng.lat) && isFinite(s.latlng.lng)).map(s=>s.latlng);
-    console.log("[rebuild#"+myGen+"] stops="+stops.length+" valid="+coords.length+" snap="+snap+" activeTrack="+(activeTrack?activeTrack.id+"/"+activeTrack.name:"NULL"));
-    if(coords.length>=2){
-      if(snap){
-        try{
-          const res=await fetchRoute(coords);
-          console.log("[rebuild#"+myGen+"] fetchRoute: "+(res?"OK "+res.meters+"m/"+(res.geometry&&res.geometry.length)+"pts":"NULL"));
-          if(res && res.geometry && Array.isArray(res.geometry) && res.geometry.length>=2){
-            localGeom=res.geometry;
-            localMeters=res.meters||0;
-          }
-        }catch(e){ console.warn("[rebuild#"+myGen+"] fetch error:",e); }
+  const coords=stops.filter(s=>s && s.latlng && isFinite(s.latlng.lat) && isFinite(s.latlng.lng)).map(s=>s.latlng);
+  console.log("[rebuild] stops="+stops.length+" valid="+coords.length+" snap="+snap+" activeTrack="+(activeTrack?activeTrack.id:"NULL"));
+  // Zabezpieczenie: jeśli nie ma activeTrack, stwórz go (ale nie nadpisuj stops)
+  if(!activeTrack){
+    console.warn("[rebuild] no active track, creating one");
+    const t=newTrack();
+    activeTrack=t;
+    if(stops.length===0) stops=activeTrack.stops;
+    else activeTrack.stops=stops; // zachowaj istniejące stops
+  }
+  // KROK 1: NARYSUJ PROSTĄ LINIĘ NATYCHMIAST (synchronicznie, bez await)
+  if(coords.length>=2){
+    lastGeometry=coords.map(c=>[c.lat,c.lng]);
+    let m=0;
+    for(let i=1;i<coords.length;i++){
+      const d=haversine(coords[i-1],coords[i]);
+      if(isFinite(d)) m+=d;
+    }
+    totalMeters=m;
+  } else if(coords.length===1){
+    lastGeometry=[[coords[0].lat,coords[0].lng]];
+    totalMeters=0;
+  } else {
+    lastGeometry=[];
+    totalMeters=0;
+  }
+  syncActive();
+  redrawAllTrackLines();
+  routeLine=activeTrack?activeTrack.line:null;
+  drawKmMarkers();
+  renderPoiList();
+  updateStats();
+  updateTarget();
+  renderTrackList();
+  const drawn=(activeTrack&&activeTrack.line)?"YES":"NO";
+  console.log("[rebuild] straight line drawn: "+drawn+" (geom.len="+lastGeometry.length+", meters="+Math.round(totalMeters)+")");
+  // KROK 2: TERAZ SPRÓBUJ ULEPSZYĆ przez OSRM (async, w tle) — jeśli się uda, podmieni linię na routing po drogach
+  if(coords.length>=2 && snap){
+    const myGen=++_rebuildGen;
+    try{
+      const res=await fetchRoute(coords);
+      if(myGen!==_rebuildGen){ console.log("[rebuild osrm] abandoned (newer)"); return; }
+      if(res && res.geometry && Array.isArray(res.geometry) && res.geometry.length>=2){
+        console.log("[rebuild osrm] OK "+res.meters+"m/"+res.geometry.length+"pts — upgrading line");
+        lastGeometry=res.geometry;
+        totalMeters=res.meters||totalMeters;
+        syncActive();
+        redrawAllTrackLines();
+        routeLine=activeTrack?activeTrack.line:null;
+        drawKmMarkers();
+        updateStats();
+        updateTarget();
+      } else {
+        console.log("[rebuild osrm] no result — keeping straight line");
       }
-      // Absolutny fallback: proste linie + haversine (zawsze zadziała jeśli mamy 2+ punkty)
-      if(localGeom.length<2){
-        console.log("[rebuild#"+myGen+"] fallback: straight-line");
-        localGeom=coords.map(c=>[c.lat,c.lng]);
-        localMeters=0;
-        for(let i=1;i<coords.length;i++){
-          const d=haversine(coords[i-1],coords[i]);
-          if(isFinite(d)) localMeters+=d;
-        }
-      }
-    } else if(coords.length===1){
-      localGeom=[[coords[0].lat,coords[0].lng]];
+    }catch(e){
+      console.warn("[rebuild osrm] error:",e);
     }
-    if(myGen!==_rebuildGen){ console.log("[rebuild#"+myGen+"] ABANDONED (newer gen)"); return; }
-    lastGeometry=localGeom; totalMeters=localMeters;
-    console.log("[rebuild#"+myGen+"] lastGeometry.length="+lastGeometry.length+" totalMeters="+Math.round(totalMeters));
-    if(!activeTrack){
-      console.warn("[rebuild#"+myGen+"] NO ACTIVE TRACK! Creating one.");
-      activeTrack=newTrack();
-      stops=activeTrack.stops;
-    }
-    syncActive();
-    redrawAllTrackLines();
-    const drawn=(activeTrack&&activeTrack.line)?"YES":"NO";
-    console.log("[rebuild#"+myGen+"] active track line drawn: "+drawn);
-    if(coords.length>=2 && drawn==="NO"){
-      toast("⚠️ Mam "+coords.length+" punktów ale linia się nie narysowała. Otwórz konsolę (F12) i wyślij screena.");
-    }
-    routeLine=activeTrack?activeTrack.line:null;
-    drawKmMarkers();
-    renderPoiList();
-    updateStats();
-    updateTarget();
-    renderTrackList();
-  }catch(err){
-    console.error("[rebuild#"+myGen+"] EXCEPTION:",err);
-    toast("❌ Błąd budowy trasy: "+(err && err.message ? err.message : String(err)));
   }
 }
 // Globalny łapacz błędów — pokazuje je jako toast (żebyśmy widzieli co się dzieje bez F12)
