@@ -1,4 +1,4 @@
-const CACHE = "planer-trasy-v42";
+const CACHE = "planer-trasy-v43";
 const SHELL = [
   "./",
   "index.html",
