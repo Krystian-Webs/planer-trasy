@@ -28,6 +28,10 @@
   })();
 </script>
 <style>
+  /* Embed/viewer: ukryj edytor NATYCHMIAST (klasa dodawana w <head>), zanim wczyta sie skrypt */
+  html.is-embed #panel, html.is-embed #searchWrap, html.is-embed #adminBanner, html.is-embed #toast,
+  html.is-viewer #panel, html.is-viewer #searchWrap, html.is-viewer #adminBanner, html.is-viewer #toast{ display:none !important; }
+  html.is-embed, html.is-embed body{ background:#000 !important; }
   :root{
     --bg:#0a0e13;--panel:rgba(20,26,34,.94);--panel-solid:#141a22;--panel-2:#1c242f;--panel-3:#232d3a;
     --line:#2a3542;--line-soft:rgba(255,255,255,.07);--ink:#eef3f8;--ink-dim:#8fa0b0;--accent:#ff6b1a;
@@ -1082,23 +1086,90 @@ $("embedCopyBtn").onclick=()=>{$("embedCode").select();navigator.clipboard?.writ
 $("embedPreviewBtn").onclick=()=>window.open(buildEmbedUrl(),"_blank");
 
 // INICJALIZACJA Z HASHU
+// ===== ODPORNOSC NA UKRYTY KONTENER (iframe w zakladce / display:none) =====
+let _mapReady=false, _mapReadyCbs=[];
+function _mapHasSize(){ const el=map.getContainer(); return el.clientWidth>0 && el.clientHeight>0; }
+function whenMapReady(cb){ if(_mapReady || _mapHasSize()){ _mapReady=true; cb(); } else _mapReadyCbs.push(cb); }
+function _flushMapReady(){
+  if(!_mapHasSize()) return;
+  map.invalidateSize();
+  if(_mapReady) return;
+  _mapReady=true;
+  const cbs=_mapReadyCbs; _mapReadyCbs=[];
+  cbs.forEach(fn=>{ try{ fn(); }catch(e){} });
+}
+if("ResizeObserver" in window){ try{ new ResizeObserver(_flushMapReady).observe(map.getContainer()); }catch(e){} }
+window.addEventListener("load", ()=>setTimeout(_flushMapReady, 60));
+
+// ===== WCZYTYWANIE PROJEKTU (brakowalo w tej wersji) =====
+async function loadProject(d){
+  tracks.forEach(t=>{ if(t.line) map.removeLayer(t.line); (t.stops||[]).forEach(s=>{ if(s.marker) map.removeLayer(s.marker); }); });
+  tracks=[]; trackSeq=1;
+  pois.forEach(p=>{ if(p.marker) map.removeLayer(p.marker); }); pois=[];
+  if($("projName")) $("projName").value = d.name || "Wczytany projekt";
+  if(typeof d.snap==="boolean"){ snap=d.snap; if($("snapToggle")) $("snapToggle").classList.toggle("on",snap); }
+  const defs=(d.tracks&&d.tracks.length)?d.tracks:[{name:"Trasa 1",color:TRACK_COLORS[0],stops:(d.stops||[])}];
+  defs.forEach(td=>{
+    const t=newTrack(td.name,td.color);
+    if(td.id!=null){ t.id=td.id; if(td.id>=idSeq) idSeq=td.id+1; }
+    (td.stops||[]).forEach(w=>{
+      const lat=parseFloat(w.lat), lng=parseFloat(w.lng);
+      if(!isFinite(lat)||!isFinite(lng)) return;
+      t.stops.push({id:idSeq++, latlng:L.latLng(lat,lng), address:w.address||"", marker:null});
+    });
+  });
+  (d.pois||[]).forEach(p=>{
+    const lat=parseFloat(p.lat), lng=parseFloat(p.lng);
+    if(!isFinite(lat)||!isFinite(lng)||!p.type||!POI[p.type]) return;
+    const o=addPoi(p.type, L.latLng(lat,lng), p.name);
+    if(o) o.note=p.note||"";
+  });
+  for(const t of tracks){
+    const coords=t.stops.filter(s=>s.latlng).map(s=>s.latlng);
+    t.geometry=[]; t.meters=0;
+    if(coords.length>=2){
+      if(snap){ const res=await fetchRoute(coords); if(res){ t.meters=res.meters; t.geometry=res.geometry; } }
+      if(t.geometry.length===0){
+        t.geometry=coords.map(c=>[c.lat,c.lng]);
+        for(let i=1;i<coords.length;i++) t.meters+=haversine(coords[i-1],coords[i]);
+      }
+    }
+  }
+  const wantId=(d.activeTrack&&tracks.find(t=>t.id===d.activeTrack))?d.activeTrack:(tracks[0]&&tracks[0].id);
+  activeTrack=tracks.find(t=>t.id===wantId)||tracks[0];
+  stops=activeTrack?activeTrack.stops:[];
+  lastGeometry=activeTrack?activeTrack.geometry:[];
+  totalMeters=activeTrack?activeTrack.meters:0;
+  stops.forEach(s=>{ if(s.latlng) makeStopMarker(s); });
+  renderTrackList(); renderStops();
+  redrawAllTrackLines(); updateStats();
+}
+
 (async function initAppFromHash(){
   const h=location.hash||"";
   const isEmbed=h.startsWith("#embed="), isViewer=h.startsWith("#view=");
   if(isEmbed || isViewer){
+    document.body.classList.add(isEmbed ? "embed-mode" : "viewer-mode");
     try{
       const raw=h.slice(isEmbed?7:6);
       const json=JSON.parse(LZString.decompressFromEncodedURIComponent(raw));
       if(json){
         await loadProject(json);
-        const allPts=[]; tracks.forEach(t=>t.geometry.forEach(g=>allPts.push(g)));
-        if(allPts.length>=2){
-          map.fitBounds(L.latLngBounds(allPts),{padding:isEmbed?[10,10]:[40,40],animate:false});
-          if(isEmbed) setTimeout(()=>playOnMap(true), 600);
-          if(isViewer){ document.body.classList.add("viewer-mode"); $("vhTitle").textContent=json.name||"Trasa"; }
-        }
+        const nm=(json.name||"Trasa");
+        if(isEmbed){ const s=$("embedSubtitle"); if(s) s.textContent=nm; }
+        if(isViewer){ const v=$("vhTitle"); if(v) v.textContent=nm; }
+        whenMapReady(()=>{
+          try{
+            const allPts=[]; tracks.forEach(t=>t.geometry.forEach(g=>allPts.push(g)));
+            map.invalidateSize();
+            if(allPts.length>=2){
+              map.fitBounds(L.latLngBounds(allPts),{padding:isEmbed?[10,10]:[40,40],animate:false});
+              if(isEmbed) setTimeout(()=>playOnMap(true), 600);
+            }
+          }catch(e){ console.error(e); }
+        });
       }
-    }catch(e){}
+    }catch(e){ console.error("init embed/view:", e); }
   } else {
     activeTrack=newTrack();
     renderStops(); renderTrackList();
@@ -1193,7 +1264,7 @@ $("saveLocalBtn").onclick=saveLocal;
 setTimeout(renderLocal, 150);
 
 // PLANY
-$("plansBtn").onclick=>$("plansOverlay").classList.add("show");
+$("plansBtn").onclick=()=>$("plansOverlay").classList.add("show");
 $("plansCloseBtn").onclick=()=>$("plansOverlay").classList.remove("show");
 (function buildPlans(){
   const grid=$("plansGrid"); if(!grid) return;
@@ -1203,6 +1274,21 @@ $("plansCloseBtn").onclick=()=>$("plansOverlay").classList.remove("show");
 function onResize(){ if(map.getContainer().clientWidth>0) map.invalidateSize(); }
 window.addEventListener("resize", onResize);
 setTimeout(onResize, 300);
+
+// ===== Rejestracja service workera + auto-aktualizacja =====
+if("serviceWorker" in navigator){
+  window.addEventListener("load", ()=>{
+    navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}).then(reg=>{
+      reg.update().catch(()=>{});
+      reg.addEventListener("updatefound", ()=>{
+        const nw=reg.installing; if(!nw) return;
+        nw.addEventListener("statechange", ()=>{
+          if(nw.state==="activated" && navigator.serviceWorker.controller) location.reload();
+        });
+      });
+    }).catch(()=>{});
+  });
+}
 </script>
 </body>
 </html>
