@@ -1036,6 +1036,11 @@ function playOnMap(isEmbed){
   mapAnim.startedAt=performance.now();
   mapAnim.duration=Math.max(25000, Math.min(80000, (total/1000)*4500));
 
+  // PRZYBLIŻENIE: kamera trzyma kropkę na środku i jedzie za nią jak normalna mapa
+  // (nie sam znacznik po nieruchomym kadrze). Większa liczba = bliżej (17 bliżej, 15 szerzej).
+  var FOLLOW_ZOOM = 16;
+  if(isEmbed) map.setView([path[0].lat,path[0].lng], FOLLOW_ZOOM, {animate:false});
+
   function step(now){
     const progress=Math.min(1,(now-mapAnim.startedAt)/mapAnim.duration);
     const dist=total*progress;
