@@ -305,7 +305,7 @@
   #embedCtrl{display:none;position:fixed;bottom:calc(14px + var(--sab));right:14px;z-index:1500;background:rgba(5,8,12,.88);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid rgba(251,191,36,.28);border-radius:99px;padding:5px 6px;gap:2px;box-shadow:0 10px 30px rgba(0,0,0,.7)}
   body.embed-mode #embedCtrl{display:flex}
   #embedCtrl button{background:transparent;border:0;color:#fff;padding:8px 12px;font:600 12px var(--font);cursor:pointer;border-radius:99px;min-width:38px}
-  #embedCtrl button:hover{background:rgba(255,255,255,.08)}
+  #embedCtrl button:hover{background:rgba(255,255,208,.08)}
   #embedCtrl button.primary{background:linear-gradient(135deg,#fbbf24,#f59e0b);color:#0a0e13;font-weight:800}
   #embedTitle{display:none;position:fixed;top:12px;left:12px;z-index:1500;background:rgba(20,26,34,.9);backdrop-filter:blur(14px);color:#fff;padding:8px 14px;border-radius:99px;font:700 13px var(--font);border:1px solid var(--line-soft);box-shadow:var(--shadow-sm);max-width:calc(100% - 120px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   @media (max-width:520px){
@@ -321,7 +321,7 @@
     #embedCtrl button{padding:7px 9px;font-size:11px;min-width:32px}
   }
   @media (max-width:360px){
-    #embedHeader .brand{height:36px}
+    #embedHeader{brand:height:36px}
     #embedInfo{padding:8px 11px;max-width:calc(100% - 82px)}
     #embedInfo .ei-km{font-size:22px}
     #embedInfo .ei-streets{display:none}
@@ -1018,9 +1018,13 @@ function animPointAtMeters(path,target){
   return {lat:a.lat+(b.lat-a.lat)*t, lng:a.lng+(b.lng-a.lng)*t};
 }
 
-let mapAnim={marker:null, revealLine:null, rafId:null, startedAt:0, duration:40000};
+let mapAnim={marker:null, revealLine:null, rafId:null, startedAt:0, duration:40000, lastPanTime:0};
 function playOnMap(isEmbed){
   if(mapAnim.rafId){ cancelAnimationFrame(mapAnim.rafId); mapAnim.rafId=null; }
+  
+  // Wymuszenie ponownego przeliczenia krawędzi okna, zapobiega czarnym pasom w iframe
+  map.invalidateSize();
+
   const {path,total}=animBuildFullPath();
   if(!path.length||total<1) return;
 
@@ -1034,12 +1038,13 @@ function playOnMap(isEmbed){
   mapAnim.revealLine=L.polyline([[path[0].lat,path[0].lng]],{pane:"reveal",color:"#fbbf24",weight:6,opacity:1,lineCap:"round"}).addTo(map);
 
   mapAnim.startedAt=performance.now();
+  mapAnim.lastPanTime=0;
   mapAnim.duration=Math.max(25000, Math.min(80000, (total/1000)*4500));
 
-  // PRZYBLIŻENIE: kamera trzyma kropkę na środku i jedzie za nią jak normalna mapa
-  // (nie sam znacznik po nieruchomym kadrze). Większa liczba = bliżej (17 bliżej, 15 szerzej).
   var FOLLOW_ZOOM = 16;
-  if(isEmbed) map.setView([path[0].lat,path[0].lng], FOLLOW_ZOOM, {animate:false});
+  if(isEmbed) {
+    map.setView([path[0].lat,path[0].lng], FOLLOW_ZOOM, {animate:false});
+  }
 
   function step(now){
     const progress=Math.min(1,(now-mapAnim.startedAt)/mapAnim.duration);
@@ -1048,7 +1053,17 @@ function playOnMap(isEmbed){
     if(pos && mapAnim.marker){
       mapAnim.marker.setLatLng([pos.lat,pos.lng]);
       mapAnim.revealLine.addLatLng([pos.lat,pos.lng]);
-      if(isEmbed) map.panTo([pos.lat,pos.lng],{animate:false});
+      
+      // Płynne podążanie kamery: ruch bez zrywania kafelków co klatkę
+      if(isEmbed && (now - mapAnim.lastPanTime > 40)){
+        map.panTo([pos.lat,pos.lng],{
+          animate: true,
+          duration: 0.25,
+          easeLinearity: 0.25,
+          noMoveStart: true
+        });
+        mapAnim.lastPanTime = now;
+      }
     }
     if($("statKm")) $("statKm").textContent=(dist/1000).toFixed(2).replace(".",",")+" / "+(total/1000).toFixed(2).replace(".",",");
     if(progress<1){
