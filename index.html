@@ -469,6 +469,19 @@
         <div class="chips" id="poiChips"></div>
       </div>
       <div class="group">
+        <div class="lbl">Twoje własne typy punktów</div>
+        <div id="customPoiList" style="margin-bottom:8px"></div>
+        <div class="row" style="gap:6px;margin-bottom:6px">
+          <input type="text" id="customPoiIcon" class="fld" placeholder="🎯" maxlength="4" style="width:56px;text-align:center;font-size:18px;flex:none">
+          <input type="text" id="customPoiLabel" class="fld" placeholder="Nazwa (np. Foto-punkt)" style="flex:1">
+        </div>
+        <div class="row" style="gap:6px;align-items:stretch">
+          <input type="color" id="customPoiColor" value="#8b5cf6" style="width:46px;height:38px;border:1px solid var(--line);border-radius:8px;padding:2px;cursor:pointer;background:var(--panel-2);flex:none">
+          <button class="btn primary" id="customPoiAddBtn" style="flex:1">➕ Dodaj typ</button>
+        </div>
+        <p class="hint">Wpisz emoji + nazwę + wybierz kolor → nowy typ pojawi się w liście u góry. Twoje typy zapisują się w tej przeglądarce (nie synchronizują z chmurą).</p>
+      </div>
+      <div class="group">
         <div class="lbl">Punkty na trasie <span class="count" id="listCount">0</span></div>
         <div id="poiList"><div class="empty">Brak punktów. Wybierz typ powyżej i kliknij na mapie, albo rozmieść automatycznie.</div></div>
         <button class="btn" id="clearPoiBtn" style="margin-top:8px" disabled>Usuń wszystkie punkty</button>
@@ -615,7 +628,7 @@ const POI={
   parking:{ic:"🅿️",label:"Parking",color:"#0a66c2"},
   arrow:{ic:"➡️",label:"Kierunek / strzałka",color:"#ff6b1a"},
   pole:{ic:"🚧",label:"Słupek / pachołek",color:"#dc2626"},
-  gate:{ic:"⛓",label:"Barierka",color:"#64748b"},
+  gate:{ic:"🥅",label:"Barierka",color:"#64748b"},
   poi:{ic:"⭐",label:"Punkt",color:"#e67e22"}
 };
 let mode="route", poiType="checkpoint", snap=true, showKm=false;
@@ -1748,7 +1761,101 @@ $("plansOverlay").addEventListener("click",e=>{if(e.target.id==="plansOverlay")$
 applyPlanUI();
 
 if(!tracks.length){activeTrack=newTrack("Trasa 1",TRACK_COLORS[0]);stops=activeTrack.stops;}
-(function buildChips(){const wrap=$("poiChips");if(!wrap)return;wrap.innerHTML="";Object.keys(POI).forEach(type=>{const b=document.createElement("button");b.className="chip"+(type===poiType?" on":"");b.dataset.type=type;b.innerHTML=`<span class="ic">${POI[type].ic}</span>${POI[type].label}`;wrap.appendChild(b);});})();
+// ========== WŁASNE TYPY POI (definiowane przez użytkownika, zapisywane lokalnie) ==========
+const CUSTOM_POI_KEY="planer_custom_pois";
+function getCustomPois(){ try{ return JSON.parse(localStorage.getItem(CUSTOM_POI_KEY)||"[]"); }catch(e){ return []; } }
+function saveCustomPois(list){ try{ localStorage.setItem(CUSTOM_POI_KEY, JSON.stringify(list)); return true; }catch(e){ toast("Za mało miejsca w przeglądarce."); return false; } }
+function mergeCustomIntoPOI(){
+  // Wyczyść stare wpisy custom
+  Object.keys(POI).forEach(k=>{ if(k.indexOf("custom_")===0) delete POI[k]; });
+  // Dodaj aktualne
+  getCustomPois().forEach(c=>{
+    if(!c || !c.id) return;
+    POI["custom_"+c.id]={ic:c.ic||"⭐", label:c.label||"Punkt", color:c.color||"#8b5cf6"};
+  });
+}
+function buildChips(){
+  const wrap=$("poiChips"); if(!wrap) return;
+  wrap.innerHTML="";
+  Object.keys(POI).forEach(type=>{
+    const b=document.createElement("button");
+    b.className="chip"+(type===poiType?" on":"");
+    b.dataset.type=type;
+    b.innerHTML=`<span class="ic">${POI[type].ic}</span>${POI[type].label}`;
+    wrap.appendChild(b);
+  });
+}
+function renderCustomPoiList(){
+  const box=$("customPoiList"); if(!box) return;
+  const list=getCustomPois();
+  if(!list.length){ box.innerHTML='<div class="empty" style="font-size:11px;padding:8px">Nie masz jeszcze własnych typów. Dodaj poniżej.</div>'; return; }
+  box.innerHTML="";
+  list.forEach(c=>{
+    const row=document.createElement("div");
+    row.style.cssText="display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--panel-3);border:1px solid var(--line);border-radius:8px;margin-bottom:5px";
+    const badge=document.createElement("span");
+    badge.style.cssText=`background:${c.color};color:#fff;width:28px;height:28px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:14px;flex:none;border:2px solid #fff;box-shadow:0 1px 4px #0007`;
+    badge.textContent=c.ic;
+    row.appendChild(badge);
+    const nm=document.createElement("span");
+    nm.style.cssText="flex:1;font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap";
+    nm.textContent=c.label;
+    row.appendChild(nm);
+    const del=document.createElement("button");
+    del.textContent="✕";
+    del.title="Usuń ten typ";
+    del.style.cssText="background:transparent;border:1px solid var(--line);color:var(--ink-dim);width:28px;height:28px;border-radius:7px;cursor:pointer;font-size:12px;flex:none";
+    del.onmouseenter=()=>{ del.style.borderColor="var(--bad)"; del.style.color="var(--bad)"; };
+    del.onmouseleave=()=>{ del.style.borderColor="var(--line)"; del.style.color="var(--ink-dim)"; };
+    del.onclick=()=>{
+      if(!confirm(`Usunąć typ „${c.label}"?\n\nPunkty tego typu już postawione na mapie ZOSTANĄ, ale nowy typ nie będzie dostępny.`)) return;
+      const filtered=getCustomPois().filter(x=>x.id!==c.id);
+      saveCustomPois(filtered);
+      rebuildAllPoiUI();
+      toast("Usunięto typ.");
+    };
+    row.appendChild(del);
+    box.appendChild(row);
+  });
+}
+function rebuildAllPoiUI(){
+  mergeCustomIntoPOI();
+  buildChips();
+  renderCustomPoiList();
+  try{ renderPoiList(); }catch(e){}
+}
+// Wire up „Dodaj typ"
+setTimeout(()=>{
+  const addBtn=$("customPoiAddBtn");
+  if(addBtn){
+    addBtn.onclick=()=>{
+      const ic=($("customPoiIcon").value||"").trim()||"⭐";
+      const label=($("customPoiLabel").value||"").trim();
+      const color=$("customPoiColor").value||"#8b5cf6";
+      if(!label){ toast("Wpisz nazwę typu punktu."); $("customPoiLabel").focus(); return; }
+      if(label.length>40){ toast("Nazwa za długa (max 40 znaków)."); return; }
+      const list=getCustomPois();
+      // Unikaj duplikatów po nazwie (case-insensitive)
+      if(list.some(c=>c.label.toLowerCase()===label.toLowerCase())){
+        if(!confirm(`Typ „${label}" już istnieje. Dodać kolejny?`)) return;
+      }
+      const id=Date.now().toString(36)+Math.random().toString(36).slice(2,5);
+      list.push({id,ic,label,color});
+      if(saveCustomPois(list)){
+        $("customPoiIcon").value="";
+        $("customPoiLabel").value="";
+        rebuildAllPoiUI();
+        toast(`✓ Dodano typ „${label}". Znajdziesz go w liście typów wyżej.`);
+      }
+    };
+    // Enter w polu Nazwa dodaje
+    const lab=$("customPoiLabel");
+    if(lab) lab.addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); addBtn.click(); } });
+  }
+}, 100);
+// Startowo załaduj custom + zbuduj chipy
+mergeCustomIntoPOI();
+setTimeout(()=>{ renderCustomPoiList(); buildChips(); }, 150);
 renderTrackList();
 renderStops();updateStats();searchInfoText();
 $("fitBtn").onclick=fitToRoute;
