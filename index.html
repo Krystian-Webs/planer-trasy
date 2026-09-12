@@ -353,6 +353,8 @@
   @keyframes poiHighlightPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.3)}}
   .poiItem.flash{animation:poiFlash 1.4s ease}
   @keyframes poiFlash{0%{background:var(--accent-soft);border-color:var(--accent)}70%{background:var(--accent-soft);border-color:var(--accent)}100%{background:var(--panel-2);border-color:var(--line)}}
+  /* płynne rozsuwanie stłoczonych pinezek pod kursorem */
+  .leaflet-marker-icon.poi-spreadable{transition:transform .2s cubic-bezier(.2,.8,.3,1)}
 </style>
 </head>
 <body>
@@ -1019,6 +1021,7 @@ function applyPoiVisibility(){
     if(vis){ if(!map.hasLayer(p.marker))map.addLayer(p.marker); }
     else { if(map.hasLayer(p.marker))map.removeLayer(p.marker); }
   });
+  try{computeClusters();}catch(e){}
 }
 function buildPoiFilterChips(){
   const wrap=$("poiFilterChips");if(!wrap)return;
@@ -1041,8 +1044,71 @@ function buildPoiFilterChips(){
     wrap.appendChild(b);
   });
 }
-function addPoi(type,latlng,name){const id=idSeq++;const obj={id,type,latlng,name:name||"",note:""};obj.marker=L.marker(latlng,{icon:poiIcon(type),draggable:true}).addTo(map);obj.marker.on("dragend",()=>{obj.latlng=obj.marker.getLatLng();renderPoiList();});obj.marker.on("click",()=>{openEditor(id);highlightPoi(obj);});pois.push(obj);renderPoiList();updateStats();return obj;}
-function renderPoiList(){const el=$("poiList");buildPoiFilterChips();if(pois.length===0){el.innerHTML='<div class="empty">Brak punktów. Wybierz typ powyżej i kliknij na mapie, albo rozmieść automatycznie.</div>';applyPoiVisibility();return;}const cps=pois.filter(p=>p.type==="checkpoint").map(p=>({p,km:kmAlong(p.latlng)??1e9})).sort((a,b)=>a.km-b.km);cps.forEach((x,i)=>x.p._cpNo=i+1);pois.forEach(p=>p.marker.setIcon(poiIcon(p.type,p.type==="checkpoint"?p._cpNo:null)));el.innerHTML="";let anyVisible=false;Object.keys(POI).forEach(type=>{const groupAll=pois.filter(p=>p.type===type);if(!groupAll.length)return;const group=groupAll.filter(poiIsVisible);if(!group.length)return;anyVisible=true;const head=document.createElement("div");head.className="poiGroupHead";head.style.borderLeft="4px solid "+POI[type].color;head.style.paddingLeft="8px";head.innerHTML=`<span class="ic">${POI[type].ic}</span><span class="gl">${POI[type].label}</span><span class="count" style="background:${POI[type].color}">${group.length}</span>`;el.appendChild(head);const sorted=group.map(p=>({p,km:kmAlong(p.latlng)})).sort((a,b)=>(a.km??1e9)-(b.km??1e9));sorted.forEach(({p,km})=>{const def=POI[p.type].label+(p.type==="checkpoint"?" "+p._cpNo:"");const display=p.name||def;const kmTxt=km!=null?km.toFixed(2).replace(".",",")+" km":"—";const item=document.createElement("div");item.className="poiItem";item.dataset.id=p.id;item.innerHTML=`<div class="head"><span class="ic">${POI[p.type].ic}</span><span class="nm">${display.replace(/</g,"&lt;")}</span><span class="km">${kmTxt}</span><button class="del" title="Usuń">✕</button></div><div class="edit"><input type="text" class="fld" placeholder="Nazwa (np. ${def})" value="${(p.name||"").replace(/"/g,"&quot;")}"><textarea class="fld" placeholder="Notatka — obsada, sprzęt, godziny otwarcia">${(p.note||"").replace(/</g,"&lt;")}</textarea><div style="border-top:1px dashed var(--line);margin-top:2px;padding-top:8px"><div style="font-size:10.5px;font-weight:600;color:var(--ink-dim);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">🙋 Przypisany wolontariusz (opcjonalnie)</div><div class="row" style="gap:6px"><input type="text" class="fld vol-num" placeholder="Numer" value="${(p.volNum||"").replace(/"/g,"&quot;")}" style="flex:none;width:78px"><input type="text" class="fld vol-name" placeholder="Imię i nazwisko" value="${(p.volName||"").replace(/"/g,"&quot;")}" style="flex:1"></div><div class="vol-confirm" style="font-size:11px;margin-top:7px;font-weight:600"></div></div></div>`;item.querySelector(".head").onclick=ev=>{if(ev.target.classList.contains("del")){map.removeLayer(p.marker);pois=pois.filter(x=>x.id!==p.id);renderPoiList();updateStats();return;}item.classList.toggle("open");if(item.classList.contains("open")){map.panTo(p.latlng);highlightPoi(p);}};const ni=item.querySelector("input"),ta=item.querySelector("textarea");ni.oninput=()=>{p.name=ni.value;item.querySelector(".nm").textContent=p.name||def;};ta.oninput=()=>{p.note=ta.value;};const volNumInp=item.querySelector(".vol-num"),volNameInp=item.querySelector(".vol-name"),volConfirm=item.querySelector(".vol-confirm");const refreshVolConfirm=()=>{const okNum=(p.volNum||"").trim(),okName=(p.volName||"").trim();if(okNum&&okName){volConfirm.style.color="var(--good)";volConfirm.textContent="✓ Zapisano — nr "+okNum+", "+okName;}else if(okNum||okName){volConfirm.style.color="var(--accent-2)";volConfirm.textContent="⚠ Uzupełnij oba pola (numer i imię), żeby przypisanie się liczyło.";}else{volConfirm.textContent="";}};refreshVolConfirm();if(volNumInp)volNumInp.oninput=()=>{p.volNum=volNumInp.value;refreshVolConfirm();updateVolAssignedCount();};if(volNameInp)volNameInp.oninput=()=>{p.volName=volNameInp.value;refreshVolConfirm();updateVolAssignedCount();};el.appendChild(item);});});if(!anyVisible)el.innerHTML='<div class="empty">Wszystkie punkty są odfiltrowane — włącz je w filtrze powyżej.</div>';applyPoiVisibility();}
+// ---------- rozsuwanie stłoczonych pinezek pod kursorem (żeby łatwo wybrać właściwą) ----------
+function tagPoiIcon(p){const el=p.marker&&p.marker.getElement();if(el)el.classList.add("poi-spreadable");}
+let activeSpreadGroup=null,spreadHoverT=null;
+function computeClusters(){
+  const visible=pois.filter(p=>p.marker&&map.hasLayer(p.marker));
+  const items=visible.map(p=>({p,pt:map.latLngToContainerPoint(p.latlng)}));
+  const THRESH=22;
+  const used=new Set();
+  items.forEach((it,i)=>{
+    if(used.has(i))return;
+    const group=[it];used.add(i);
+    for(let pass=0;pass<items.length;pass++){
+      let grown=false;
+      items.forEach((jt,j)=>{
+        if(used.has(j))return;
+        const close=group.some(g=>Math.hypot(g.pt.x-jt.pt.x,g.pt.y-jt.pt.y)<THRESH);
+        if(close){group.push(jt);used.add(j);grown=true;}
+      });
+      if(!grown)break;
+    }
+    const arr=group.map(g=>g.p);
+    arr.forEach(p=>{p._cluster=arr;});
+  });
+}
+function spreadGroup(group){
+  const pts=group.map(p=>map.latLngToContainerPoint(p.latlng));
+  const cx=pts.reduce((a,pt)=>a+pt.x,0)/pts.length;
+  const cy=pts.reduce((a,pt)=>a+pt.y,0)/pts.length;
+  const n=group.length;
+  const radius=Math.max(30,15+9*n);
+  group.forEach((p,i)=>{
+    const angle=(2*Math.PI*i/n)-Math.PI/2;
+    const tx=cx+radius*Math.cos(angle),ty=cy+radius*Math.sin(angle);
+    p.marker.setLatLng(map.containerPointToLatLng([tx,ty]));
+    if(p.marker.setZIndexOffset)p.marker.setZIndexOffset(2000);
+  });
+}
+function collapseGroup(group){
+  group.forEach(p=>{p.marker.setLatLng(p.latlng);if(p.marker.setZIndexOffset)p.marker.setZIndexOffset(0);});
+}
+function scheduleCollapse(group){
+  clearTimeout(spreadHoverT);
+  spreadHoverT=setTimeout(()=>{if(activeSpreadGroup===group){collapseGroup(group);activeSpreadGroup=null;}},260);
+}
+function attachSpreadHover(p){
+  p.marker.on("mouseover",()=>{
+    clearTimeout(spreadHoverT);
+    const group=p._cluster;
+    if(!group||group.length<2){if(activeSpreadGroup){collapseGroup(activeSpreadGroup);activeSpreadGroup=null;}return;}
+    if(activeSpreadGroup===group)return;
+    if(activeSpreadGroup)collapseGroup(activeSpreadGroup);
+    activeSpreadGroup=group;
+    spreadGroup(group);
+  });
+  p.marker.on("mouseout",()=>{
+    const group=p._cluster;
+    if(!group||group.length<2)return;
+    scheduleCollapse(group);
+  });
+}
+map.on("movestart zoomstart",()=>{clearTimeout(spreadHoverT);if(activeSpreadGroup){collapseGroup(activeSpreadGroup);activeSpreadGroup=null;}});
+map.on("zoomend moveend",()=>computeClusters());
+
+function addPoi(type,latlng,name){const id=idSeq++;const obj={id,type,latlng,name:name||"",note:""};obj.marker=L.marker(latlng,{icon:poiIcon(type),draggable:true}).addTo(map);tagPoiIcon(obj);attachSpreadHover(obj);obj.marker.on("dragend",()=>{obj.latlng=obj.marker.getLatLng();renderPoiList();});obj.marker.on("click",()=>{openEditor(id);highlightPoi(obj);});pois.push(obj);renderPoiList();updateStats();return obj;}
+function renderPoiList(){const el=$("poiList");buildPoiFilterChips();if(pois.length===0){el.innerHTML='<div class="empty">Brak punktów. Wybierz typ powyżej i kliknij na mapie, albo rozmieść automatycznie.</div>';applyPoiVisibility();return;}const cps=pois.filter(p=>p.type==="checkpoint").map(p=>({p,km:kmAlong(p.latlng)??1e9})).sort((a,b)=>a.km-b.km);cps.forEach((x,i)=>x.p._cpNo=i+1);pois.forEach(p=>{p.marker.setIcon(poiIcon(p.type,p.type==="checkpoint"?p._cpNo:null));tagPoiIcon(p);});el.innerHTML="";let anyVisible=false;Object.keys(POI).forEach(type=>{const groupAll=pois.filter(p=>p.type===type);if(!groupAll.length)return;const group=groupAll.filter(poiIsVisible);if(!group.length)return;anyVisible=true;const head=document.createElement("div");head.className="poiGroupHead";head.style.borderLeft="4px solid "+POI[type].color;head.style.paddingLeft="8px";head.innerHTML=`<span class="ic">${POI[type].ic}</span><span class="gl">${POI[type].label}</span><span class="count" style="background:${POI[type].color}">${group.length}</span>`;el.appendChild(head);const sorted=group.map(p=>({p,km:kmAlong(p.latlng)})).sort((a,b)=>(a.km??1e9)-(b.km??1e9));sorted.forEach(({p,km})=>{const def=POI[p.type].label+(p.type==="checkpoint"?" "+p._cpNo:"");const display=p.name||def;const kmTxt=km!=null?km.toFixed(2).replace(".",",")+" km":"—";const item=document.createElement("div");item.className="poiItem";item.dataset.id=p.id;item.innerHTML=`<div class="head"><span class="ic">${POI[p.type].ic}</span><span class="nm">${display.replace(/</g,"&lt;")}</span><span class="km">${kmTxt}</span><button class="del" title="Usuń">✕</button></div><div class="edit"><input type="text" class="fld" placeholder="Nazwa (np. ${def})" value="${(p.name||"").replace(/"/g,"&quot;")}"><textarea class="fld" placeholder="Notatka — obsada, sprzęt, godziny otwarcia">${(p.note||"").replace(/</g,"&lt;")}</textarea><div style="border-top:1px dashed var(--line);margin-top:2px;padding-top:8px"><div style="font-size:10.5px;font-weight:600;color:var(--ink-dim);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">🙋 Przypisany wolontariusz (opcjonalnie)</div><div class="row" style="gap:6px"><input type="text" class="fld vol-num" placeholder="Numer" value="${(p.volNum||"").replace(/"/g,"&quot;")}" style="flex:none;width:78px"><input type="text" class="fld vol-name" placeholder="Imię i nazwisko" value="${(p.volName||"").replace(/"/g,"&quot;")}" style="flex:1"></div><div class="vol-confirm" style="font-size:11px;margin-top:7px;font-weight:600"></div></div></div>`;item.querySelector(".head").onclick=ev=>{if(ev.target.classList.contains("del")){map.removeLayer(p.marker);pois=pois.filter(x=>x.id!==p.id);renderPoiList();updateStats();return;}item.classList.toggle("open");if(item.classList.contains("open")){map.panTo(p.latlng);highlightPoi(p);}};const ni=item.querySelector("input"),ta=item.querySelector("textarea");ni.oninput=()=>{p.name=ni.value;item.querySelector(".nm").textContent=p.name||def;};ta.oninput=()=>{p.note=ta.value;};const volNumInp=item.querySelector(".vol-num"),volNameInp=item.querySelector(".vol-name"),volConfirm=item.querySelector(".vol-confirm");const refreshVolConfirm=()=>{const okNum=(p.volNum||"").trim(),okName=(p.volName||"").trim();if(okNum&&okName){volConfirm.style.color="var(--good)";volConfirm.textContent="✓ Zapisano — nr "+okNum+", "+okName;}else if(okNum||okName){volConfirm.style.color="var(--accent-2)";volConfirm.textContent="⚠ Uzupełnij oba pola (numer i imię), żeby przypisanie się liczyło.";}else{volConfirm.textContent="";}};refreshVolConfirm();if(volNumInp)volNumInp.oninput=()=>{p.volNum=volNumInp.value;refreshVolConfirm();updateVolAssignedCount();};if(volNameInp)volNameInp.oninput=()=>{p.volName=volNameInp.value;refreshVolConfirm();updateVolAssignedCount();};el.appendChild(item);});});if(!anyVisible)el.innerHTML='<div class="empty">Wszystkie punkty są odfiltrowane — włącz je w filtrze powyżej.</div>';applyPoiVisibility();}
 function openEditor(id){const item=document.querySelector(`.poiItem[data-id="${id}"]`);if(item){$("panel").classList.remove("collapsed");item.classList.add("open");item.scrollIntoView({behavior:"smooth",block:"center"});}}
 
 function openTypeChooser(latlng){
