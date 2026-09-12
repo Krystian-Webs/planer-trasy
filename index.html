@@ -348,6 +348,11 @@
   }
   .leaflet-marker-icon.insert-cursor{filter:drop-shadow(0 0 12px #fbbf24) drop-shadow(0 0 6px #fbbf24) brightness(1.15);animation:insertCursorPulse 1s ease-in-out infinite;z-index:9999!important}
   @keyframes insertCursorPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.15)}}
+  /* podświetlenie zaznaczonego punktu (kliknięcie na liście lub na mapie) */
+  .leaflet-marker-icon.poi-highlight{filter:drop-shadow(0 0 4px #fff) drop-shadow(0 0 14px var(--accent)) brightness(1.3)!important;animation:poiHighlightPulse .85s ease-in-out 3;z-index:9997!important}
+  @keyframes poiHighlightPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.3)}}
+  .poiItem.flash{animation:poiFlash 1.4s ease}
+  @keyframes poiFlash{0%{background:var(--accent-soft);border-color:var(--accent)}70%{background:var(--accent-soft);border-color:var(--accent)}100%{background:var(--panel-2);border-color:var(--line)}}
 </style>
 </head>
 <body>
@@ -507,6 +512,14 @@
       </div>
       <div class="group">
         <div class="lbl">Punkty na trasie <span class="count" id="listCount">0</span></div>
+        <div id="poiFilterWrap" style="margin-bottom:10px">
+          <div class="chips" id="poiFilterChips"></div>
+          <div class="switch" style="margin-top:8px"><div><span>Tylko z przypisanym wolontariuszem</span><small>Ukryj punkty bez numeru i imienia</small></div><div class="toggle" id="volOnlyToggle"></div></div>
+          <div class="row" style="margin-top:8px;gap:6px">
+            <button class="btn" id="poiFilterAllBtn" style="font-size:11.5px">Pokaż wszystkie</button>
+            <button class="btn" id="poiFilterNoneBtn" style="font-size:11.5px">Ukryj wszystkie</button>
+          </div>
+        </div>
         <div id="poiList"><div class="empty">Brak punktów. Wybierz typ powyżej i kliknij na mapie, albo rozmieść automatycznie.</div></div>
         <button class="btn" id="clearPoiBtn" style="margin-top:8px" disabled>Usuń wszystkie punkty</button>
       </div>
@@ -969,8 +982,67 @@ async function insertStopOnLine(latlng){
 function drawKmMarkers(){if(kmLayer){map.removeLayer(kmLayer);kmLayer=null;}if(!showKm||lastGeometry.length<2)return;kmLayer=L.layerGroup().addTo(map);for(let km=1;km*1000<totalMeters;km++)L.marker(pointAtMeters(km*1000),{icon:L.divIcon({className:"kmlabel",html:`${km} km`,iconSize:null}),interactive:false}).addTo(kmLayer);}
 function updateStats(){syncActive();const sum=tracks.reduce((a,t)=>a+(t.meters||0),0);$("distVal").textContent=(sum/1000).toFixed(2).replace(".",",");const db=$("distBadge");if(db)db.textContent=(tracks.length>1?"📏 Suma: ":"📏 Trasa: ")+(sum/1000).toFixed(2).replace(".",",")+" km"+(tracks.length>1&&activeTrack?" (tu: "+(totalMeters/1000).toFixed(2).replace(".",",")+")":"");$("cpVal").textContent=pois.filter(p=>p.type==="checkpoint").length;$("poiCount").textContent=pois.length;$("listCount").textContent=pois.length;$("clearPoiBtn").disabled=pois.length===0;$("gpxBtn").disabled=lastGeometry.length<2&&pois.length===0;const _pngBtn=$("pngBtn");if(_pngBtn)_pngBtn.disabled=!tracks.some(t=>t.geometry&&t.geometry.length>=2);const _playBtn=$("playRouteBtn");if(_playBtn)_playBtn.disabled=!tracks.some(t=>t.geometry&&t.geometry.length>=2);const _vidBtn=$("videoDownloadBtn");if(_vidBtn)_vidBtn.disabled=!tracks.some(t=>t.geometry&&t.geometry.length>=2);try{updateTime();}catch(e){}}
 
-function addPoi(type,latlng,name){const id=idSeq++;const obj={id,type,latlng,name:name||"",note:""};obj.marker=L.marker(latlng,{icon:poiIcon(type),draggable:true}).addTo(map);obj.marker.on("dragend",()=>{obj.latlng=obj.marker.getLatLng();renderPoiList();});obj.marker.on("click",()=>openEditor(id));pois.push(obj);renderPoiList();updateStats();return obj;}
-function renderPoiList(){const el=$("poiList");if(pois.length===0){el.innerHTML='<div class="empty">Brak punktów. Wybierz typ powyżej i kliknij na mapie, albo rozmieść automatycznie.</div>';return;}const cps=pois.filter(p=>p.type==="checkpoint").map(p=>({p,km:kmAlong(p.latlng)??1e9})).sort((a,b)=>a.km-b.km);cps.forEach((x,i)=>x.p._cpNo=i+1);pois.forEach(p=>p.marker.setIcon(poiIcon(p.type,p.type==="checkpoint"?p._cpNo:null)));el.innerHTML="";Object.keys(POI).forEach(type=>{const group=pois.filter(p=>p.type===type);if(!group.length)return;const head=document.createElement("div");head.className="poiGroupHead";head.style.borderLeft="4px solid "+POI[type].color;head.style.paddingLeft="8px";head.innerHTML=`<span class="ic">${POI[type].ic}</span><span class="gl">${POI[type].label}</span><span class="count" style="background:${POI[type].color}">${group.length}</span>`;el.appendChild(head);const sorted=group.map(p=>({p,km:kmAlong(p.latlng)})).sort((a,b)=>(a.km??1e9)-(b.km??1e9));sorted.forEach(({p,km})=>{const def=POI[p.type].label+(p.type==="checkpoint"?" "+p._cpNo:"");const display=p.name||def;const kmTxt=km!=null?km.toFixed(2).replace(".",",")+" km":"—";const item=document.createElement("div");item.className="poiItem";item.dataset.id=p.id;item.innerHTML=`<div class="head"><span class="ic">${POI[p.type].ic}</span><span class="nm">${display.replace(/</g,"&lt;")}</span><span class="km">${kmTxt}</span><button class="del" title="Usuń">✕</button></div><div class="edit"><input type="text" class="fld" placeholder="Nazwa (np. ${def})" value="${(p.name||"").replace(/"/g,"&quot;")}"><textarea class="fld" placeholder="Notatka — obsada, sprzęt, godziny otwarcia">${(p.note||"").replace(/</g,"&lt;")}</textarea><div style="border-top:1px dashed var(--line);margin-top:2px;padding-top:8px"><div style="font-size:10.5px;font-weight:600;color:var(--ink-dim);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">🙋 Przypisany wolontariusz (opcjonalnie)</div><div class="row" style="gap:6px"><input type="text" class="fld vol-num" placeholder="Numer" value="${(p.volNum||"").replace(/"/g,"&quot;")}" style="flex:none;width:78px"><input type="text" class="fld vol-name" placeholder="Imię i nazwisko" value="${(p.volName||"").replace(/"/g,"&quot;")}" style="flex:1"></div></div></div>`;item.querySelector(".head").onclick=ev=>{if(ev.target.classList.contains("del")){map.removeLayer(p.marker);pois=pois.filter(x=>x.id!==p.id);renderPoiList();updateStats();return;}item.classList.toggle("open");if(item.classList.contains("open"))map.panTo(p.latlng);};const ni=item.querySelector("input"),ta=item.querySelector("textarea");ni.oninput=()=>{p.name=ni.value;item.querySelector(".nm").textContent=p.name||def;};ta.oninput=()=>{p.note=ta.value;};const volNumInp=item.querySelector(".vol-num"),volNameInp=item.querySelector(".vol-name");if(volNumInp)volNumInp.oninput=()=>{p.volNum=volNumInp.value;updateVolAssignedCount();};if(volNameInp)volNameInp.oninput=()=>{p.volName=volNameInp.value;updateVolAssignedCount();};el.appendChild(item);});});}
+// ---------- podświetlanie zaznaczonego punktu (lista <-> mapa) ----------
+function highlightPoi(p){
+  if(p&&p.marker){
+    const el=p.marker.getElement();
+    if(el){
+      el.classList.remove("poi-highlight");
+      void el.offsetWidth; // restart animacji
+      el.classList.add("poi-highlight");
+      clearTimeout(p._hlT);
+      p._hlT=setTimeout(()=>{try{el.classList.remove("poi-highlight");}catch(e){}},2600);
+    }
+  }
+  if(p){
+    const item=document.querySelector(`.poiItem[data-id="${p.id}"]`);
+    if(item){
+      item.classList.remove("flash");
+      void item.offsetWidth;
+      item.classList.add("flash");
+      setTimeout(()=>{try{item.classList.remove("flash");}catch(e){}},1500);
+    }
+  }
+}
+// ---------- filtrowanie widoczności punktów (typ / tylko wolontariusze) ----------
+let poiVisibleTypes=null; // null = wszystkie widoczne
+let volOnlyFilter=false;
+function poiIsVisible(p){
+  if(volOnlyFilter && !((p.volNum||"").trim()&&(p.volName||"").trim()))return false;
+  if(poiVisibleTypes && !poiVisibleTypes.has(p.type))return false;
+  return true;
+}
+function applyPoiVisibility(){
+  pois.forEach(p=>{
+    if(!p.marker)return;
+    const vis=poiIsVisible(p);
+    if(vis){ if(!map.hasLayer(p.marker))map.addLayer(p.marker); }
+    else { if(map.hasLayer(p.marker))map.removeLayer(p.marker); }
+  });
+}
+function buildPoiFilterChips(){
+  const wrap=$("poiFilterChips");if(!wrap)return;
+  const typesPresent=[...new Set(pois.map(p=>p.type))];
+  if(!typesPresent.length){wrap.innerHTML="";return;}
+  if(poiVisibleTypes===null)poiVisibleTypes=new Set(typesPresent);
+  else typesPresent.forEach(t=>{if(!wrap.dataset.seen)poiVisibleTypes.add(t);});
+  wrap.dataset.seen="1";
+  wrap.innerHTML="";
+  typesPresent.forEach(type=>{
+    const on=poiVisibleTypes.has(type);
+    const b=document.createElement("button");
+    b.className="chip"+(on?" on":"");
+    b.innerHTML=`<span class="ic">${POI[type].ic}</span>${POI[type].label}`;
+    b.onclick=()=>{
+      if(poiVisibleTypes.has(type))poiVisibleTypes.delete(type);else poiVisibleTypes.add(type);
+      applyPoiVisibility();
+      renderPoiList();
+    };
+    wrap.appendChild(b);
+  });
+}
+function addPoi(type,latlng,name){const id=idSeq++;const obj={id,type,latlng,name:name||"",note:""};obj.marker=L.marker(latlng,{icon:poiIcon(type),draggable:true}).addTo(map);obj.marker.on("dragend",()=>{obj.latlng=obj.marker.getLatLng();renderPoiList();});obj.marker.on("click",()=>{openEditor(id);highlightPoi(obj);});pois.push(obj);renderPoiList();updateStats();return obj;}
+function renderPoiList(){const el=$("poiList");buildPoiFilterChips();if(pois.length===0){el.innerHTML='<div class="empty">Brak punktów. Wybierz typ powyżej i kliknij na mapie, albo rozmieść automatycznie.</div>';applyPoiVisibility();return;}const cps=pois.filter(p=>p.type==="checkpoint").map(p=>({p,km:kmAlong(p.latlng)??1e9})).sort((a,b)=>a.km-b.km);cps.forEach((x,i)=>x.p._cpNo=i+1);pois.forEach(p=>p.marker.setIcon(poiIcon(p.type,p.type==="checkpoint"?p._cpNo:null)));el.innerHTML="";let anyVisible=false;Object.keys(POI).forEach(type=>{const groupAll=pois.filter(p=>p.type===type);if(!groupAll.length)return;const group=groupAll.filter(poiIsVisible);if(!group.length)return;anyVisible=true;const head=document.createElement("div");head.className="poiGroupHead";head.style.borderLeft="4px solid "+POI[type].color;head.style.paddingLeft="8px";head.innerHTML=`<span class="ic">${POI[type].ic}</span><span class="gl">${POI[type].label}</span><span class="count" style="background:${POI[type].color}">${group.length}</span>`;el.appendChild(head);const sorted=group.map(p=>({p,km:kmAlong(p.latlng)})).sort((a,b)=>(a.km??1e9)-(b.km??1e9));sorted.forEach(({p,km})=>{const def=POI[p.type].label+(p.type==="checkpoint"?" "+p._cpNo:"");const display=p.name||def;const kmTxt=km!=null?km.toFixed(2).replace(".",",")+" km":"—";const item=document.createElement("div");item.className="poiItem";item.dataset.id=p.id;item.innerHTML=`<div class="head"><span class="ic">${POI[p.type].ic}</span><span class="nm">${display.replace(/</g,"&lt;")}</span><span class="km">${kmTxt}</span><button class="del" title="Usuń">✕</button></div><div class="edit"><input type="text" class="fld" placeholder="Nazwa (np. ${def})" value="${(p.name||"").replace(/"/g,"&quot;")}"><textarea class="fld" placeholder="Notatka — obsada, sprzęt, godziny otwarcia">${(p.note||"").replace(/</g,"&lt;")}</textarea><div style="border-top:1px dashed var(--line);margin-top:2px;padding-top:8px"><div style="font-size:10.5px;font-weight:600;color:var(--ink-dim);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">🙋 Przypisany wolontariusz (opcjonalnie)</div><div class="row" style="gap:6px"><input type="text" class="fld vol-num" placeholder="Numer" value="${(p.volNum||"").replace(/"/g,"&quot;")}" style="flex:none;width:78px"><input type="text" class="fld vol-name" placeholder="Imię i nazwisko" value="${(p.volName||"").replace(/"/g,"&quot;")}" style="flex:1"></div><div class="vol-confirm" style="font-size:11px;margin-top:7px;font-weight:600"></div></div></div>`;item.querySelector(".head").onclick=ev=>{if(ev.target.classList.contains("del")){map.removeLayer(p.marker);pois=pois.filter(x=>x.id!==p.id);renderPoiList();updateStats();return;}item.classList.toggle("open");if(item.classList.contains("open")){map.panTo(p.latlng);highlightPoi(p);}};const ni=item.querySelector("input"),ta=item.querySelector("textarea");ni.oninput=()=>{p.name=ni.value;item.querySelector(".nm").textContent=p.name||def;};ta.oninput=()=>{p.note=ta.value;};const volNumInp=item.querySelector(".vol-num"),volNameInp=item.querySelector(".vol-name"),volConfirm=item.querySelector(".vol-confirm");const refreshVolConfirm=()=>{const okNum=(p.volNum||"").trim(),okName=(p.volName||"").trim();if(okNum&&okName){volConfirm.style.color="var(--good)";volConfirm.textContent="✓ Zapisano — nr "+okNum+", "+okName;}else if(okNum||okName){volConfirm.style.color="var(--accent-2)";volConfirm.textContent="⚠ Uzupełnij oba pola (numer i imię), żeby przypisanie się liczyło.";}else{volConfirm.textContent="";}};refreshVolConfirm();if(volNumInp)volNumInp.oninput=()=>{p.volNum=volNumInp.value;refreshVolConfirm();updateVolAssignedCount();};if(volNameInp)volNameInp.oninput=()=>{p.volName=volNameInp.value;refreshVolConfirm();updateVolAssignedCount();};el.appendChild(item);});});if(!anyVisible)el.innerHTML='<div class="empty">Wszystkie punkty są odfiltrowane — włącz je w filtrze powyżej.</div>';applyPoiVisibility();}
 function openEditor(id){const item=document.querySelector(`.poiItem[data-id="${id}"]`);if(item){$("panel").classList.remove("collapsed");item.classList.add("open");item.scrollIntoView({behavior:"smooth",block:"center"});}}
 
 function openTypeChooser(latlng){
@@ -992,6 +1064,9 @@ $("poiChips").addEventListener("click",e=>{const b=e.target.closest(".chip");if(
 $("snapToggle").addEventListener("click",function(){snap=!snap;this.classList.toggle("on",snap);rebuildRoute();});
 $("kmToggle").addEventListener("click",function(){showKm=!showKm;this.classList.toggle("on",showKm);drawKmMarkers();});
 $("clearPoiBtn").onclick=()=>{pois.forEach(p=>map.removeLayer(p.marker));pois=[];renderPoiList();updateStats();};
+$("volOnlyToggle").addEventListener("click",function(){volOnlyFilter=!volOnlyFilter;this.classList.toggle("on",volOnlyFilter);applyPoiVisibility();renderPoiList();});
+$("poiFilterAllBtn").onclick=()=>{poiVisibleTypes=new Set(pois.map(p=>p.type));buildPoiFilterChips();applyPoiVisibility();renderPoiList();};
+$("poiFilterNoneBtn").onclick=()=>{poiVisibleTypes=new Set();buildPoiFilterChips();applyPoiVisibility();renderPoiList();};
 $("collapseBtn").onclick=()=>{const p=$("panel");p.classList.toggle("collapsed");$("collapseBtn").textContent=p.classList.contains("collapsed")?"▴":"▾";setTimeout(()=>map.invalidateSize(),250);};
 $("grabBar").onclick=()=>$("collapseBtn").onclick();
 
@@ -1039,10 +1114,12 @@ $("fileInput").onchange=async e=>{
 };
 $("newBtn").onclick=()=>{if((stops.some(s=>s.latlng)||pois.length)&&!confirm("Wyczyścić bieżący projekt?"))return;clearAll();$("projName").value="Moje wydarzenie";toast("Nowy projekt");};
 function clearTracksFromMap(){tracks.forEach(t=>{if(t.line){map.removeLayer(t.line);t.line=null;}t.stops.forEach(s=>{if(s.marker){map.removeLayer(s.marker);s.marker=null;}});});}
-function clearAll(){clearTracksFromMap();tracks=[];trackSeq=1;pois.forEach(p=>map.removeLayer(p.marker));pois=[];activeTrack=newTrack();stops=activeTrack.stops;lastGeometry=[];totalMeters=0;renderTrackList();renderStops();rebuildRoute();}
+function clearAll(){clearTracksFromMap();tracks=[];trackSeq=1;pois.forEach(p=>map.removeLayer(p.marker));pois=[];poiVisibleTypes=null;volOnlyFilter=false;const vt=$("volOnlyToggle");if(vt)vt.classList.remove("on");activeTrack=newTrack();stops=activeTrack.stops;lastGeometry=[];totalMeters=0;renderTrackList();renderStops();rebuildRoute();}
 function fitToRoute(){syncActive();const all=[];tracks.forEach(t=>t.stops.forEach(s=>{if(s.latlng)all.push(s.latlng);}));pois.forEach(p=>all.push(p.latlng));if(!all.length){toast("Brak punktów na trasie.");return;}map.invalidateSize();const b=L.latLngBounds(all).pad(0.25);if(all.length===1)map.setView(all[0],15);else map.fitBounds(b);}
 async function loadProject(d,keepView){
   clearTracksFromMap();tracks=[];trackSeq=1;pois.forEach(p=>map.removeLayer(p.marker));pois=[];
+  poiVisibleTypes=null;volOnlyFilter=false;{const vt=$("volOnlyToggle");if(vt)vt.classList.remove("on");}
+  const filterWrap=$("poiFilterChips");if(filterWrap)delete filterWrap.dataset.seen;
   $("projName").value=d.name||"Wczytany projekt";
   if(typeof d.snap==="boolean"){snap=d.snap;$("snapToggle").classList.toggle("on",snap);}
   const trackDefs=(d.tracks&&d.tracks.length)?d.tracks:[{name:"Trasa 1",color:TRACK_COLORS[0],stops:(d.stops||d.waypoints||[])}];
@@ -1216,18 +1293,136 @@ function close3D(){$("threeOverlay").style.display="none";if(map3d){map3d.remove
 $("threeBtn").onclick=open3D;
 $("threeClose").onclick=close3D;
 
-// ---------- GPX export (wszystkie trasy + punkty jako waypointy) ----------
-function exportGPX(){
+// ---------- GPX export — wysoka jakość: wysokości terenu, znaczniki czasu, symbole Garmin ----------
+const GPX_SYM={
+  checkpoint:"Flag, Blue",water:"Drinking Water",food:"Restaurant",timing:"Flag, Green",
+  wc:"Restroom",medic:"Medical Facility",ambulance:"Hospital",volunteer:"Flag, Orange",
+  police:"Police Station",marshal:"Flag, Orange",security:"Building",parking:"Parking Area",
+  arrow:"Waypoint",pole:"Skull and Crossbones",gate:"Bridge",poi:"Waypoint"
+};
+function gpxSymFor(type){return GPX_SYM[type]||"Waypoint";}
+// Pobiera wysokości dla listy [lat,lng] — próbkuje (limit zapytań do API), resztę dolicza interpolacją liniową.
+async function fetchElevationsInterpolated(coordsLatLng){
+  const n=coordsLatLng.length;
+  if(n===0)return null;
+  const maxSamples=170;
+  const step=Math.max(1,Math.ceil(n/maxSamples));
+  const idx=[];
+  for(let i=0;i<n;i+=step)idx.push(i);
+  if(idx[idx.length-1]!==n-1)idx.push(n-1);
+  try{
+    const lats=idx.map(i=>coordsLatLng[i][0].toFixed(5)).join(",");
+    const lngs=idx.map(i=>coordsLatLng[i][1].toFixed(5)).join(",");
+    const r=await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${lats}&longitude=${lngs}`);
+    if(!r.ok)return null;
+    const j=await r.json();
+    const e=j.elevation;
+    if(!Array.isArray(e)||e.length!==idx.length)return null;
+    const full=new Array(n).fill(null);
+    for(let k=0;k<idx.length;k++)full[idx[k]]=e[k];
+    let lastIdx=0,lastVal=full[0];
+    for(let i=1;i<n;i++){
+      if(full[i]!=null){
+        const gap=i-lastIdx;
+        if(gap>1){const a=lastVal,b=full[i];for(let g=1;g<gap;g++)full[lastIdx+g]=a+(b-a)*(g/gap);}
+        lastIdx=i;lastVal=full[i];
+      }
+    }
+    return full;
+  }catch(e){return null;}
+}
+async function exportGPX(){
   syncActive();
-  const esc=s=>String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
-  let g='<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Planer Trasy" xmlns="http://www.topografix.com/GPX/1/1">\n<metadata><name>'+esc($("projName").value||"Trasa")+'</name></metadata>\n';
-  pois.forEach(p=>{g+=`<wpt lat="${p.latlng.lat.toFixed(6)}" lon="${p.latlng.lng.toFixed(6)}"><name>${esc(p.name||POI[p.type].label)}</name>${p.note?`<desc>${esc(p.note)}</desc>`:""}<sym>${esc(POI[p.type].label)}</sym></wpt>\n`;});
-  tracks.forEach(t=>{if(!t.geometry||t.geometry.length<2)return;g+=`<trk><name>${esc(t.name)}</name><trkseg>`;t.geometry.forEach(c=>{g+=`<trkpt lat="${c[0].toFixed(6)}" lon="${c[1].toFixed(6)}"/>`;});g+=`</trkseg></trk>\n`;});
-  g+="</gpx>";
-  const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([g],{type:"application/gpx+xml"}));a.download=($("projName").value||"trasa").replace(/[^\w-]+/g,"_")+".gpx";a.click();URL.revokeObjectURL(a.href);
-  toast("Pobrano plik GPX ✓");
+  const btn=$("gpxBtn"),oldTxt=btn?btn.textContent:"";
+  if(btn){btn.disabled=true;btn.textContent="⏳ Liczę wysokości terenu…";}
+  try{
+    const esc=s=>String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+    const speedMps=(typeof paceSec==="number"&&paceSec>0)?1000/paceSec:(1000/360);
+    const startMs=Date.now();
+    let elevOk=true;
+    // wysokości dla punktów (POI)
+    let poiElev=null;
+    if(pois.length){
+      poiElev=await fetchElevationsInterpolated(pois.map(p=>[p.latlng.lat,p.latlng.lng]));
+      if(!poiElev)elevOk=false;
+    }
+    if(btn)btn.textContent="⏳ Liczę wysokości tras…";
+    // wysokości + czas dla każdej trasy
+    const trackData=[];
+    let cumMetersAll=0;
+    for(const t of tracks){
+      if(!t.geometry||t.geometry.length<2)continue;
+      const elevs=await fetchElevationsInterpolated(t.geometry);
+      if(!elevs)elevOk=false;
+      const times=[];
+      let cum=cumMetersAll;
+      times.push(cum);
+      for(let i=1;i<t.geometry.length;i++){
+        cum+=haversine({lat:t.geometry[i-1][0],lng:t.geometry[i-1][1]},{lat:t.geometry[i][0],lng:t.geometry[i][1]});
+        times.push(cum);
+      }
+      cumMetersAll=cum;
+      trackData.push({t,elevs,times});
+    }
+    if(btn)btn.textContent="⏳ Generuję plik…";
+    let minLat=90,maxLat=-90,minLng=180,maxLng=-180;
+    const noteBounds=ll=>{if(ll[0]<minLat)minLat=ll[0];if(ll[0]>maxLat)maxLat=ll[0];if(ll[1]<minLng)minLng=ll[1];if(ll[1]>maxLng)maxLng=ll[1];};
+    pois.forEach(p=>noteBounds([p.latlng.lat,p.latlng.lng]));
+    tracks.forEach(t=>{if(t.geometry)t.geometry.forEach(c=>noteBounds(c));});
+    const hasBounds=minLat<=maxLat&&minLng<=maxLng;
+    const projName=$("projName").value||"Trasa";
+    let g='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
+    g+='<gpx version="1.1" creator="Planer Trasy — https://krystian-webs.github.io" '
+      +'xmlns="http://www.topografix.com/GPX/1/1" '
+      +'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" '
+      +'xmlns:gpxx="http://www.garmin.com/xmlschemas/GpxExtensions/v3" '
+      +'xmlns:gpxtpx="http://www.garmin.com/xmlschemas/TrackPointExtension/v1" '
+      +'xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd '
+      +'http://www.garmin.com/xmlschemas/GpxExtensions/v3 http://www.garmin.com/xmlschemas/GpxExtensions/v3.xsd">\n';
+    g+='<metadata>\n';
+    g+='<name>'+esc(projName)+'</name>\n';
+    g+='<desc>Wygenerowano w Planerze Trasy'+(elevOk?"":" (bez pełnych danych wysokościowych — brak połączenia z serwisem wysokości)")+'</desc>\n';
+    g+='<time>'+new Date(startMs).toISOString()+'</time>\n';
+    if(hasBounds)g+=`<bounds minlat="${minLat.toFixed(6)}" minlon="${minLng.toFixed(6)}" maxlat="${maxLat.toFixed(6)}" maxlon="${maxLng.toFixed(6)}"/>\n`;
+    g+='</metadata>\n';
+    pois.forEach((p,i)=>{
+      const ele=poiElev?poiElev[i]:null;
+      const volInfo=(p.volNum&&p.volName)?(`Wolontariusz: ${p.volName} (nr ${p.volNum}). `):"";
+      const descTxt=(volInfo+(p.note||"")).trim();
+      g+=`<wpt lat="${p.latlng.lat.toFixed(6)}" lon="${p.latlng.lng.toFixed(6)}">`;
+      if(ele!=null)g+=`<ele>${ele.toFixed(1)}</ele>`;
+      g+=`<name>${esc(p.name||POI[p.type].label)}</name>`;
+      if(descTxt)g+=`<desc>${esc(descTxt)}</desc>`;
+      g+=`<sym>${esc(gpxSymFor(p.type))}</sym><type>${esc(POI[p.type].label)}</type></wpt>\n`;
+    });
+    trackData.forEach(({t,elevs,times})=>{
+      g+=`<trk><name>${esc(t.name)}</name><number>${esc(String(tracks.indexOf(t)+1))}</number><trkseg>`;
+      t.geometry.forEach((c,i)=>{
+        g+=`<trkpt lat="${c[0].toFixed(6)}" lon="${c[1].toFixed(6)}">`;
+        if(elevs&&elevs[i]!=null)g+=`<ele>${elevs[i].toFixed(1)}</ele>`;
+        const tSec=times[i]/speedMps;
+        g+=`<time>${new Date(startMs+tSec*1000).toISOString()}</time>`;
+        g+=`</trkpt>`;
+      });
+      g+=`</trkseg></trk>\n`;
+    });
+    g+="</gpx>";
+    const a=document.createElement("a");
+    a.href=URL.createObjectURL(new Blob([g],{type:"application/gpx+xml"}));
+    a.download=(projName||"trasa").replace(/[^\w-]+/g,"_")+".gpx";
+    a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+    toast(elevOk?"Pobrano plik GPX ✓ (z wysokościami i czasem)":"Pobrano plik GPX ✓ (bez pełnych wysokości — sprawdź internet)");
+  }catch(err){
+    console.error(err);
+    toast("Błąd eksportu GPX: "+(err&&err.message||err));
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent=oldTxt;}
+    try{updateStats();}catch(e){}
+  }
 }
 $("gpxBtn").onclick=exportGPX;
+
 
 // ===== EKSPORT PNG =====
 // Zbiera nazwy ulic wzdłuż każdej trasy przez OSRM (steps=true), z zachowaniem kolejności i bez duplikatów.
