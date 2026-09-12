@@ -262,6 +262,21 @@
   body.viewer-mode #viewerPlayBtn{display:block}
   #viewerPlayBtn:hover{filter:brightness(1.08);transform:translateX(-50%) scale(1.02)}
   #viewerPlayBtn.playing{background:var(--panel-solid);border:2px solid var(--accent)}
+  /* tryb wolontariusza — jeden przypisany punkt + nawigacja Google Maps */
+  body.volunteer-mode #panel,body.volunteer-mode #searchWrap,body.volunteer-mode #adminBanner{display:none!important}
+  body.volunteer-mode .leaflet-marker-pane,body.volunteer-mode .leaflet-tooltip-pane,body.volunteer-mode .leaflet-popup-pane{display:none!important}
+  body.volunteer-mode .leaflet-overlay-pane{opacity:0!important}
+  body.volunteer-mode .leaflet-top.leaflet-right{top:calc(90px + var(--sat))!important}
+  #volCard{display:none;position:fixed;left:14px;right:14px;bottom:calc(18px + var(--sab));z-index:1500;background:var(--panel);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:1px solid var(--line-soft);border-radius:18px;padding:18px;box-shadow:var(--shadow);color:var(--ink);text-align:center;max-width:440px;margin:0 auto}
+  #volCard .volBadge{display:inline-block;background:var(--accent);color:#fff;font:700 12px var(--font);padding:4px 12px;border-radius:99px;letter-spacing:.5px;margin-bottom:8px}
+  #volCard .volName{font:700 18px var(--font);margin-bottom:14px}
+  #volCard .volPoint{display:flex;align-items:center;gap:12px;background:var(--panel-2);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:14px;text-align:left}
+  #volCard .volIcon{font-size:28px;flex:none}
+  #volCard .volPointName{font:700 16px var(--font)}
+  #volCard .volPointNote{font:400 12.5px var(--font);color:var(--ink-dim);margin-top:3px}
+  #volCard .volMapsBtn{display:flex;align-items:center;justify-content:center;gap:8px;background:linear-gradient(135deg,var(--accent-2),var(--accent));color:#fff;text-decoration:none;font:700 15px var(--font);padding:14px;border-radius:12px;box-shadow:0 6px 20px rgba(255,107,26,.35)}
+  #volGateOverlay{display:none;position:fixed;inset:0;z-index:5700;background:rgba(5,8,12,.8);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);align-items:center;justify-content:center;padding:18px}
+  #volGateOverlay.show{display:flex}
   /* Grayscale monochromatyczna mapa dla trybów prezentacji */
   body.embed-mode .leaflet-tile-pane,
   body.viewer-mode .leaflet-tile-pane{filter:grayscale(1) brightness(.82) contrast(1.12);-webkit-filter:grayscale(1) brightness(.82) contrast(1.12)}
@@ -405,6 +420,15 @@
           <button class="btn" id="copyLinkBtn" style="margin-top:6px">📋 Kopiuj link</button>
         </div>
         <p class="hint">Link zawiera cały projekt (trasę, punkty, notatki). Wspólnik otwiera go, widzi i edytuje to samo, a gdy chce odesłać zmiany — tworzy nowy link. Nie wymaga żadnego serwera ani pliku PHP.</p>
+      </div>
+      <div class="group">
+        <div class="lbl">Link dla wolontariuszy <span class="count" id="volAssignedCount">0</span></div>
+        <p class="hint" style="margin-top:0;margin-bottom:9px">Otwórz dowolny punkt na liście „Punkty na trasie" i wpisz przy nim numer oraz imię i nazwisko wolontariusza. Jeden link poniżej obsłuży wszystkich — każdy wolontariusz po wpisaniu SWOJEGO imienia, nazwiska i numeru zobaczy tylko swoje przypisane miejsce i przycisk nawigacji do niego.</p>
+        <button class="btn primary" id="volShareBtn">🔗 Utwórz link dla wolontariuszy</button>
+        <div id="volShareWrap" style="display:none;margin-top:8px">
+          <input id="volShareLink" class="fld" type="text" readonly style="font-size:12px">
+          <button class="btn" id="volShareCopyBtn" style="margin-top:6px">📋 Kopiuj link</button>
+        </div>
       </div>
       <div class="group">
         <div class="lbl">Współpraca na żywo</div>
@@ -602,6 +626,32 @@
     <button id="embedPlayBtn" class="primary" title="Odtwórz / pauza">▶</button>
     <button id="embedFitBtn" title="Wpasuj trasę">🔍</button>
   </div>
+  <!-- Brama wolontariusza: pojawia się po wejściu w link #vol= -->
+  <div id="volGateOverlay">
+    <div class="plansBox" style="max-width:420px">
+      <h2>🙋 Witaj, wolontariuszu!</h2>
+      <p class="sub">Podaj imię i nazwisko oraz swój numer, aby zobaczyć przypisany Ci punkt na trasie.</p>
+      <input type="text" id="volGateName" class="fld" placeholder="Imię i nazwisko" style="margin-bottom:10px">
+      <input type="text" id="volGateNumber" class="fld" placeholder="Numer" style="margin-bottom:14px">
+      <p class="hint" id="volGateError" style="display:none;color:var(--bad);margin-bottom:6px"></p>
+      <button class="btn primary" id="volGateSubmitBtn" style="width:100%">Pokaż mój punkt</button>
+    </div>
+  </div>
+
+  <!-- Karta z przypisanym punktem — widoczna po poprawnej weryfikacji -->
+  <div id="volCard">
+    <div class="volBadge">Wolontariusz nr <span id="volNum"></span></div>
+    <div class="volName" id="volName"></div>
+    <div class="volPoint">
+      <span class="volIcon" id="volIcon"></span>
+      <div>
+        <div class="volPointName" id="volPointName"></div>
+        <div class="volPointNote" id="volPointNote"></div>
+      </div>
+    </div>
+    <a id="volMapsBtn" class="volMapsBtn" target="_blank" rel="noopener">🧭 Nawiguj w Google Maps</a>
+  </div>
+
   <div id="threeOverlay" style="display:none;position:fixed;inset:0;z-index:5000;background:#000">
     <div id="threeMap" style="position:absolute;inset:0"></div>
     <button id="threeClose" style="position:absolute;top:calc(14px + env(safe-area-inset-top,0px));left:14px;z-index:5001;background:#141a22;color:#fff;border:1px solid #2a3542;border-radius:12px;padding:11px 15px;font-weight:700;cursor:pointer;font-family:inherit">✕ Zamknij 3D</button>
@@ -920,7 +970,7 @@ function drawKmMarkers(){if(kmLayer){map.removeLayer(kmLayer);kmLayer=null;}if(!
 function updateStats(){syncActive();const sum=tracks.reduce((a,t)=>a+(t.meters||0),0);$("distVal").textContent=(sum/1000).toFixed(2).replace(".",",");const db=$("distBadge");if(db)db.textContent=(tracks.length>1?"📏 Suma: ":"📏 Trasa: ")+(sum/1000).toFixed(2).replace(".",",")+" km"+(tracks.length>1&&activeTrack?" (tu: "+(totalMeters/1000).toFixed(2).replace(".",",")+")":"");$("cpVal").textContent=pois.filter(p=>p.type==="checkpoint").length;$("poiCount").textContent=pois.length;$("listCount").textContent=pois.length;$("clearPoiBtn").disabled=pois.length===0;$("gpxBtn").disabled=lastGeometry.length<2&&pois.length===0;const _pngBtn=$("pngBtn");if(_pngBtn)_pngBtn.disabled=!tracks.some(t=>t.geometry&&t.geometry.length>=2);const _playBtn=$("playRouteBtn");if(_playBtn)_playBtn.disabled=!tracks.some(t=>t.geometry&&t.geometry.length>=2);const _vidBtn=$("videoDownloadBtn");if(_vidBtn)_vidBtn.disabled=!tracks.some(t=>t.geometry&&t.geometry.length>=2);try{updateTime();}catch(e){}}
 
 function addPoi(type,latlng,name){const id=idSeq++;const obj={id,type,latlng,name:name||"",note:""};obj.marker=L.marker(latlng,{icon:poiIcon(type),draggable:true}).addTo(map);obj.marker.on("dragend",()=>{obj.latlng=obj.marker.getLatLng();renderPoiList();});obj.marker.on("click",()=>openEditor(id));pois.push(obj);renderPoiList();updateStats();return obj;}
-function renderPoiList(){const el=$("poiList");if(pois.length===0){el.innerHTML='<div class="empty">Brak punktów. Wybierz typ powyżej i kliknij na mapie, albo rozmieść automatycznie.</div>';return;}const cps=pois.filter(p=>p.type==="checkpoint").map(p=>({p,km:kmAlong(p.latlng)??1e9})).sort((a,b)=>a.km-b.km);cps.forEach((x,i)=>x.p._cpNo=i+1);pois.forEach(p=>p.marker.setIcon(poiIcon(p.type,p.type==="checkpoint"?p._cpNo:null)));el.innerHTML="";Object.keys(POI).forEach(type=>{const group=pois.filter(p=>p.type===type);if(!group.length)return;const head=document.createElement("div");head.className="poiGroupHead";head.style.borderLeft="4px solid "+POI[type].color;head.style.paddingLeft="8px";head.innerHTML=`<span class="ic">${POI[type].ic}</span><span class="gl">${POI[type].label}</span><span class="count" style="background:${POI[type].color}">${group.length}</span>`;el.appendChild(head);const sorted=group.map(p=>({p,km:kmAlong(p.latlng)})).sort((a,b)=>(a.km??1e9)-(b.km??1e9));sorted.forEach(({p,km})=>{const def=POI[p.type].label+(p.type==="checkpoint"?" "+p._cpNo:"");const display=p.name||def;const kmTxt=km!=null?km.toFixed(2).replace(".",",")+" km":"—";const item=document.createElement("div");item.className="poiItem";item.dataset.id=p.id;item.innerHTML=`<div class="head"><span class="ic">${POI[p.type].ic}</span><span class="nm">${display.replace(/</g,"&lt;")}</span><span class="km">${kmTxt}</span><button class="del" title="Usuń">✕</button></div><div class="edit"><input type="text" class="fld" placeholder="Nazwa (np. ${def})" value="${(p.name||"").replace(/"/g,"&quot;")}"><textarea class="fld" placeholder="Notatka — obsada, sprzęt, godziny otwarcia">${(p.note||"").replace(/</g,"&lt;")}</textarea></div>`;item.querySelector(".head").onclick=ev=>{if(ev.target.classList.contains("del")){map.removeLayer(p.marker);pois=pois.filter(x=>x.id!==p.id);renderPoiList();updateStats();return;}item.classList.toggle("open");if(item.classList.contains("open"))map.panTo(p.latlng);};const ni=item.querySelector("input"),ta=item.querySelector("textarea");ni.oninput=()=>{p.name=ni.value;item.querySelector(".nm").textContent=p.name||def;};ta.oninput=()=>{p.note=ta.value;};el.appendChild(item);});});}
+function renderPoiList(){const el=$("poiList");if(pois.length===0){el.innerHTML='<div class="empty">Brak punktów. Wybierz typ powyżej i kliknij na mapie, albo rozmieść automatycznie.</div>';return;}const cps=pois.filter(p=>p.type==="checkpoint").map(p=>({p,km:kmAlong(p.latlng)??1e9})).sort((a,b)=>a.km-b.km);cps.forEach((x,i)=>x.p._cpNo=i+1);pois.forEach(p=>p.marker.setIcon(poiIcon(p.type,p.type==="checkpoint"?p._cpNo:null)));el.innerHTML="";Object.keys(POI).forEach(type=>{const group=pois.filter(p=>p.type===type);if(!group.length)return;const head=document.createElement("div");head.className="poiGroupHead";head.style.borderLeft="4px solid "+POI[type].color;head.style.paddingLeft="8px";head.innerHTML=`<span class="ic">${POI[type].ic}</span><span class="gl">${POI[type].label}</span><span class="count" style="background:${POI[type].color}">${group.length}</span>`;el.appendChild(head);const sorted=group.map(p=>({p,km:kmAlong(p.latlng)})).sort((a,b)=>(a.km??1e9)-(b.km??1e9));sorted.forEach(({p,km})=>{const def=POI[p.type].label+(p.type==="checkpoint"?" "+p._cpNo:"");const display=p.name||def;const kmTxt=km!=null?km.toFixed(2).replace(".",",")+" km":"—";const item=document.createElement("div");item.className="poiItem";item.dataset.id=p.id;item.innerHTML=`<div class="head"><span class="ic">${POI[p.type].ic}</span><span class="nm">${display.replace(/</g,"&lt;")}</span><span class="km">${kmTxt}</span><button class="del" title="Usuń">✕</button></div><div class="edit"><input type="text" class="fld" placeholder="Nazwa (np. ${def})" value="${(p.name||"").replace(/"/g,"&quot;")}"><textarea class="fld" placeholder="Notatka — obsada, sprzęt, godziny otwarcia">${(p.note||"").replace(/</g,"&lt;")}</textarea><div style="border-top:1px dashed var(--line);margin-top:2px;padding-top:8px"><div style="font-size:10.5px;font-weight:600;color:var(--ink-dim);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">🙋 Przypisany wolontariusz (opcjonalnie)</div><div class="row" style="gap:6px"><input type="text" class="fld vol-num" placeholder="Numer" value="${(p.volNum||"").replace(/"/g,"&quot;")}" style="flex:none;width:78px"><input type="text" class="fld vol-name" placeholder="Imię i nazwisko" value="${(p.volName||"").replace(/"/g,"&quot;")}" style="flex:1"></div></div></div>`;item.querySelector(".head").onclick=ev=>{if(ev.target.classList.contains("del")){map.removeLayer(p.marker);pois=pois.filter(x=>x.id!==p.id);renderPoiList();updateStats();return;}item.classList.toggle("open");if(item.classList.contains("open"))map.panTo(p.latlng);};const ni=item.querySelector("input"),ta=item.querySelector("textarea");ni.oninput=()=>{p.name=ni.value;item.querySelector(".nm").textContent=p.name||def;};ta.oninput=()=>{p.note=ta.value;};const volNumInp=item.querySelector(".vol-num"),volNameInp=item.querySelector(".vol-name");if(volNumInp)volNumInp.oninput=()=>{p.volNum=volNumInp.value;updateVolAssignedCount();};if(volNameInp)volNameInp.oninput=()=>{p.volName=volNameInp.value;updateVolAssignedCount();};el.appendChild(item);});});}
 function openEditor(id){const item=document.querySelector(`.poiItem[data-id="${id}"]`);if(item){$("panel").classList.remove("collapsed");item.classList.add("open");item.scrollIntoView({behavior:"smooth",block:"center"});}}
 
 function openTypeChooser(latlng){
@@ -954,7 +1004,7 @@ sInput.addEventListener("focus",searchInfoText);
 sInput.addEventListener("input",()=>{clearTimeout(sTimer);const q=sInput.value.trim();if(q.length<3){sDrop.classList.remove("show");return;}sTimer=setTimeout(async()=>{searchInfoText();sSpin.textContent="…";try{const list=await geocode(q);sDrop.innerHTML="";if(!list.length)sDrop.innerHTML='<div class="res">Nic nie znaleziono. Dopisz miasto.</div>';else list.forEach(it=>{const el=document.createElement("div");el.className="res";el.innerHTML=`<span class="pin">📍</span><span class="t">${it.main.replace(/</g,"&lt;")}<small>${it.rest.replace(/</g,"&lt;")}</small></span>`;el.onclick=()=>{const ll=L.latLng(it.lat,it.lon);map.setView(ll,15);if(mode==="route")placeRouteStop(ll,it.main);else addPoi(poiType,ll);sDrop.classList.remove("show");sInput.value="";toast("Dodano: "+it.main);};sDrop.appendChild(el);});sDrop.classList.add("show");}catch(e){sDrop.innerHTML='<div class="res">Brak połączenia.</div>';sDrop.classList.add("show");}sSpin.textContent="";},550);});
 document.addEventListener("click",e=>{if(!$("searchWrap").contains(e.target))sDrop.classList.remove("show");});
 
-function serialize(){syncActive();return{v:4,name:$("projName").value,snap,activeTrack:activeTrack?activeTrack.id:null,tracks:tracks.map(t=>({id:t.id,name:t.name,color:t.color,stops:t.stops.filter(s=>s.latlng).map(s=>({lat:s.latlng.lat,lng:s.latlng.lng,address:s.address}))})),pois:pois.map(p=>({type:p.type,lat:p.latlng.lat,lng:p.latlng.lng,name:p.name,note:p.note}))};}
+function serialize(){syncActive();return{v:4,name:$("projName").value,snap,activeTrack:activeTrack?activeTrack.id:null,tracks:tracks.map(t=>({id:t.id,name:t.name,color:t.color,stops:t.stops.filter(s=>s.latlng).map(s=>({lat:s.latlng.lat,lng:s.latlng.lng,address:s.address}))})),pois:pois.map(p=>({type:p.type,lat:p.latlng.lat,lng:p.latlng.lng,name:p.name,note:p.note,volNum:p.volNum||"",volName:p.volName||""}))};}
 $("saveBtn").onclick=()=>{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(serialize(),null,2)],{type:"application/json"}));a.download=($("projName").value||"projekt").replace(/[^\w-]+/g,"_")+".json";a.click();URL.revokeObjectURL(a.href);toast("Zapisano projekt ✓");};
 $("loadBtn").onclick=()=>$("fileInput").click();
 $("fileInput").onchange=async e=>{
@@ -997,12 +1047,13 @@ async function loadProject(d,keepView){
   if(typeof d.snap==="boolean"){snap=d.snap;$("snapToggle").classList.toggle("on",snap);}
   const trackDefs=(d.tracks&&d.tracks.length)?d.tracks:[{name:"Trasa 1",color:TRACK_COLORS[0],stops:(d.stops||d.waypoints||[])}];
   trackDefs.forEach(td=>{const t=newTrack(td.name,td.color);if(td.id!=null){t.id=td.id;if(td.id>=idSeq)idSeq=td.id+1;}(td.stops||[]).forEach(w=>{const lat=parseFloat(w.lat), lng=parseFloat(w.lng);if(!isFinite(lat)||!isFinite(lng))return;const s={id:idSeq++,latlng:L.latLng(lat,lng),address:w.address||"",marker:null};t.stops.push(s);});});
-  (d.pois||[]).forEach(p=>{const lat=parseFloat(p.lat), lng=parseFloat(p.lng);if(!isFinite(lat)||!isFinite(lng)||!p.type||!POI[p.type])return;const o=addPoi(p.type,L.latLng(lat,lng),p.name);if(o)o.note=p.note||"";});
+  (d.pois||[]).forEach(p=>{const lat=parseFloat(p.lat), lng=parseFloat(p.lng);if(!isFinite(lat)||!isFinite(lng)||!p.type||!POI[p.type])return;const o=addPoi(p.type,L.latLng(lat,lng),p.name);if(o){o.note=p.note||"";o.volNum=p.volNum||"";o.volName=p.volName||"";}});
   for(const t of tracks){const coords=t.stops.filter(s=>s.latlng).map(s=>s.latlng);t.geometry=[];t.meters=0;if(coords.length>=2){if(snap){const res=await fetchRoute(coords);if(res){t.meters=res.meters;t.geometry=res.geometry;}}if(t.geometry.length===0){t.geometry=coords.map(c=>[c.lat,c.lng]);for(let i=1;i<coords.length;i++)t.meters+=haversine(coords[i-1],coords[i]);}}}
   const wantId=(d.activeTrack&&tracks.find(t=>t.id===d.activeTrack))?d.activeTrack:tracks[0].id;
   activeTrack=tracks.find(t=>t.id===wantId);stops=activeTrack.stops;lastGeometry=activeTrack.geometry;totalMeters=activeTrack.meters;
   stops.forEach(s=>{if(s.latlng)makeStopMarker(s);});
   renderTrackList();renderStops();await rebuildRoute();
+  updateVolAssignedCount();
   if(!keepView){fitToRoute();setTimeout(fitToRoute,250);}
 }
 
@@ -1087,7 +1138,7 @@ function loadFromHash(){
     try{const data=JSON.parse(LZString.decompressFromEncodedURIComponent(h.slice(3)));if(data){loadProject(data);toast("Wczytano projekt z linku.");return;}}catch(e){toast("Nie udało się odczytać projektu z linku.");}
   }
   // brak linku z projektem, brak pokoju, brak trybu prezentacji ani embed -> spróbuj wczytać autozapis z tego urządzenia
-  if(h.indexOf("#room=")!==0 && h.indexOf("#view=")!==0 && h.indexOf("#embed=")!==0){
+  if(h.indexOf("#room=")!==0 && h.indexOf("#view=")!==0 && h.indexOf("#embed=")!==0 && h.indexOf("#vol=")!==0){
     try{const saved=localStorage.getItem("planer_autosave");if(saved){const d=JSON.parse(saved);const hasTrack=d&&d.tracks&&d.tracks.some(t=>t.stops&&t.stops.length);const hasOld=d&&d.stops&&d.stops.length;if(d&&(hasTrack||hasOld||(d.pois&&d.pois.length))){loadProject(d);toast("Przywrócono ostatni projekt z tego urządzenia.");}}}catch(e){}
   }
 }
@@ -1857,7 +1908,7 @@ setTimeout(()=>{
 mergeCustomIntoPOI();
 setTimeout(()=>{ renderCustomPoiList(); buildChips(); }, 150);
 renderTrackList();
-renderStops();updateStats();searchInfoText();
+renderStops();updateStats();searchInfoText();updateVolAssignedCount();
 $("fitBtn").onclick=fitToRoute;
 $("addTrackBtn").onclick=async()=>{
   const hasContent=tracks.some(t=>t.stops && t.stops.some(s=>s.latlng)) || pois.length;
@@ -2687,12 +2738,110 @@ if("serviceWorker" in navigator){
     }).catch(()=>{});
   });
 }
+// ==========================================================
+// WOLONTARIUSZE — jeden wspólny link; każdy widzi tylko swoje miejsce
+// ==========================================================
+function collectVolunteerAssignments(){
+  return pois.filter(p=>p.volNum&&String(p.volNum).trim()&&p.volName&&String(p.volName).trim()).map(p=>({
+    n:String(p.volNum).trim().slice(0,10),
+    name:String(p.volName).trim().slice(0,60),
+    lat:p.latlng.lat,
+    lng:p.latlng.lng,
+    label:p.name||POI[p.type].label,
+    type:p.type,
+    note:p.note||""
+  }));
+}
+function updateVolAssignedCount(){
+  const c=$("volAssignedCount");if(c)c.textContent=collectVolunteerAssignments().length;
+}
+$("volShareBtn").onclick=()=>{
+  const list=collectVolunteerAssignments();
+  if(!list.length){toast("Najpierw przy punktach na liście wpisz numer i imię wolontariusza.");return;}
+  try{
+    const enc=LZString.compressToEncodedURIComponent(JSON.stringify({list}));
+    const url=location.origin+location.pathname+"#vol="+enc;
+    $("volShareLink").value=url;$("volShareWrap").style.display="block";
+    if(navigator.clipboard)navigator.clipboard.writeText(url).then(()=>toast("Link skopiowany — wyślij wszystkim wolontariuszom ✓")).catch(()=>toast("Link gotowy — skopiuj poniżej."));
+    else toast("Link gotowy — skopiuj poniżej.");
+    if(url.length>7000)toast("Uwaga: dużo przypisań — link jest bardzo długi.");
+  }catch(e){toast("Nie udało się utworzyć linku.");}
+};
+$("volShareCopyBtn").onclick=async()=>{
+  const i=$("volShareLink");i.select();
+  try{await navigator.clipboard.writeText(i.value);}catch(e){try{document.execCommand("copy");}catch(_){}}
+  toast("Skopiowano link.");
+};
+
+function ensureVolPane(){
+  if(!map.getPane("volmark")){map.createPane("volmark");map.getPane("volmark").style.zIndex=700;}
+  return "volmark";
+}
+let volMarker=null,volList=null;
+function activateVolunteerModeIfNeeded(){
+  const h=location.hash||"";
+  if(h.indexOf("#vol=")!==0)return false;
+  let payload=null;
+  try{payload=JSON.parse(LZString.decompressFromEncodedURIComponent(h.slice(5)));}catch(e){payload=null;}
+  if(!payload||!Array.isArray(payload.list)||!payload.list.length){
+    toast("Nieprawidłowy link wolontariusza.");
+    return false;
+  }
+  volList=payload.list;
+  $("volGateOverlay").classList.add("show");
+  return true;
+}
+function volGateSubmit(){
+  if(!volList)return;
+  const num=($("volGateNumber").value||"").trim();
+  const name=($("volGateName").value||"").trim();
+  const norm=s=>s.toLowerCase().replace(/\s+/g," ").trim();
+  const err=$("volGateError");
+  if(!num||!name){err.textContent="Wpisz imię, nazwisko i numer.";err.style.display="block";return;}
+  const match=volList.find(p=>String(p.n)===num&&norm(p.name)===norm(name));
+  if(!match){
+    err.textContent="Nie znaleziono przypisania dla tych danych. Sprawdź pisownię lub skontaktuj się z organizatorem.";
+    err.style.display="block";
+    return;
+  }
+  err.style.display="none";
+  $("volGateOverlay").classList.remove("show");
+  showVolunteerCard(match);
+}
+$("volGateSubmitBtn").onclick=volGateSubmit;
+["volGateName","volGateNumber"].forEach(id=>{const el=$(id);if(el)el.addEventListener("keydown",e=>{if(e.key==="Enter")volGateSubmit();});});
+function showVolunteerCard(p){
+  document.body.classList.add("volunteer-mode");
+  map.invalidateSize();
+  map.setView([p.lat,p.lng],16);
+  ensureVolPane();
+  const icon=(POI[p.type]&&POI[p.type].ic)||"📍";
+  const color=(POI[p.type]&&POI[p.type].color)||"#ff6b1a";
+  if(volMarker)map.removeLayer(volMarker);
+  volMarker=L.marker([p.lat,p.lng],{
+    pane:"volmark",
+    icon:L.divIcon({className:"",iconSize:[38,38],iconAnchor:[19,38],html:`<div style="position:relative;width:38px;height:38px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:${color};border:3px solid #fff;box-shadow:0 3px 10px #0008;display:flex;align-items:center;justify-content:center"><span style="transform:rotate(45deg);font-size:18px">${icon}</span></div>`})
+  }).addTo(map);
+  $("volNum").textContent=p.n;
+  $("volName").textContent=p.name;
+  $("volIcon").textContent=icon;
+  $("volPointName").textContent=p.label||"Punkt";
+  $("volPointNote").textContent=p.note||"";
+  $("volPointNote").style.display=p.note?"block":"none";
+  $("volMapsBtn").href="https://www.google.com/maps/dir/?api=1&destination="+p.lat.toFixed(6)+","+p.lng.toFixed(6);
+  $("volCard").style.display="block";
+  setTimeout(()=>map.invalidateSize(),200);
+}
+if(location.hash.indexOf("#vol=")===0){
+  setTimeout(activateVolunteerModeIfNeeded,100);
+}
+
 function fixSize(){map.invalidateSize();}
 window.addEventListener("resize",fixSize);
 window.addEventListener("orientationchange",()=>setTimeout(fixSize,300));
 window.addEventListener("load",()=>setTimeout(fixSize,150));
 setTimeout(fixSize,300);setTimeout(fixSize,1000);
-toast("Wpisz adres startu i mety, albo klikaj na mapie");
+if(!/^#(view=|embed=|vol=)/.test(location.hash||"")) toast("Wpisz adres startu i mety, albo klikaj na mapie");
 </script>
 </body>
 </html>
