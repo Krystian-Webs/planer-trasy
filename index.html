@@ -460,7 +460,7 @@
         <div id="stopsList"></div>
         <button class="addstop" id="addStopBtn">＋ Dodaj przystanek</button>
         <div class="switch" style="margin-top:10px"><div><span>Przyciągaj do ulic</span><small>Wyłącz dla linii prostej</small></div><div class="toggle on" id="snapToggle"></div></div>
-        <p class="hint">Wpisz adres startu i mety, albo klikaj bezpośrednio na mapie. Punkty można przeciągać.</p>
+        <p class="hint">Wpisz adres startu i mety, albo klikaj bezpośrednio na mapie. Punkty można przeciągać. Przycisk 🛣️/📏 przy każdym przystanku wymusza linię prostą na odcinku do NASTĘPNEGO punktu — przydatne, gdy silnik tras źle poprowadzi przez wąską ścieżkę lub chodnik.</p>
       </div>
       <div class="group">
         <div class="lbl">Dystans docelowy</div>
@@ -805,6 +805,21 @@ function makeStopMarker(s){
       toast("↩️ Dodano powrót — trasa jedzie do „"+lab+"” i wraca do startu.");
     };
     div.appendChild(bReturn);
+    // Odcinek do następnego punktu: po drogach ⇄ linia prosta
+    const idxInStops=stops.findIndex(x=>x.id===s.id);
+    if(idxInStops>=0 && idxInStops<stops.length-1){
+      const bStraight=document.createElement("button");
+      bStraight.textContent=s.straightToNext?"📏 Odcinek dalej: LINIA PROSTA":"🛣️ Odcinek dalej: po drogach";
+      bStraight.style.cssText=btnStyle+";background:"+(s.straightToNext?"#f59e0b":"#334155")+";color:#fff";
+      bStraight.onclick=()=>{
+        map.closePopup();
+        s.straightToNext=!s.straightToNext;
+        renderStops();
+        rebuildRoute();
+        toast(s.straightToNext?"📏 Ten odcinek pójdzie teraz linią prostą.":"🛣️ Ten odcinek wraca do trasy po drogach.");
+      };
+      div.appendChild(bStraight);
+    }
     // Usuń
     const bDel=document.createElement("button");
     bDel.textContent="✕ Usuń ten punkt";
@@ -839,7 +854,7 @@ function removeStop(id){const s=stops.find(x=>x.id===id);if(s&&s.marker)map.remo
 function renumberStops(){let n=0;stops.forEach(s=>{if(s.marker){n++;s.marker.setIcon(waypointIcon(n));}});}
 function ensureEndpoints(){while(stops.length<2)stops.push({id:idSeq++,latlng:null,address:"",marker:null});}
 function clearStop(s){if(s.marker){map.removeLayer(s.marker);s.marker=null;}s.latlng=null;s.address="";renderStops();rebuildRoute();}
-function renderStops(){const wrap=$("stopsList");wrap.innerHTML="";ensureEndpoints();stops.forEach((s,i)=>{const[lab,col]=stopLabel(i);const isEnd=(i===0||i===stops.length-1);const row=document.createElement("div");row.className="stop";row.innerHTML=`<div class="slabel"><span class="dotc" style="background:${col}"></span>${lab}</div><div class="inwrap"><input class="fld" type="text" placeholder="Wpisz adres lub miejsce…" value="${(s.address||"").replace(/"/g,"&quot;")}"><button class="mv up" title="Wyżej">↑</button><button class="mv dn" title="Niżej">↓</button><button class="rm" title="${isEnd?"Wyczyść":"Usuń przystanek"}">${isEnd?"⌫":"✕"}</button></div>`;const input=row.querySelector("input"),up=row.querySelector(".up"),dn=row.querySelector(".dn");up.disabled=(i===0);dn.disabled=(i===stops.length-1);up.onclick=()=>moveStop(i,-1);dn.onclick=()=>moveStop(i,1);row.querySelector(".rm").onclick=()=>{if(isEnd)clearStop(s);else removeStop(s.id);};attachAutocomplete(input,it=>{const ll=L.latLng(it.lat,it.lon);s.latlng=ll;s.address=it.main;if(s.marker)s.marker.setLatLng(ll);else makeStopMarker(s);input.value=s.address;renderStops();map.setView(ll,15);rebuildRoute();});wrap.appendChild(row);});renumberStops();}
+function renderStops(){const wrap=$("stopsList");wrap.innerHTML="";ensureEndpoints();stops.forEach((s,i)=>{const[lab,col]=stopLabel(i);const isEnd=(i===0||i===stops.length-1);const hasNext=i<stops.length-1;const row=document.createElement("div");row.className="stop";row.innerHTML=`<div class="slabel"><span class="dotc" style="background:${col}"></span>${lab}</div><div class="inwrap"><input class="fld" type="text" placeholder="Wpisz adres lub miejsce…" value="${(s.address||"").replace(/"/g,"&quot;")}">${hasNext?`<button class="mv straight" title="">${s.straightToNext?"📏":"🛣️"}</button>`:""}<button class="mv up" title="Wyżej">↑</button><button class="mv dn" title="Niżej">↓</button><button class="rm" title="${isEnd?"Wyczyść":"Usuń przystanek"}">${isEnd?"⌫":"✕"}</button></div>`;const input=row.querySelector("input"),up=row.querySelector(".up"),dn=row.querySelector(".dn");up.disabled=(i===0);dn.disabled=(i===stops.length-1);up.onclick=()=>moveStop(i,-1);dn.onclick=()=>moveStop(i,1);row.querySelector(".rm").onclick=()=>{if(isEnd)clearStop(s);else removeStop(s.id);};const straightBtn=row.querySelector(".straight");if(straightBtn){straightBtn.title=s.straightToNext?"Odcinek do następnego punktu: LINIA PROSTA (kliknij, by wrócić do trasy po drogach)":"Odcinek do następnego punktu: po drogach (kliknij, by wymusić linię prostą)";straightBtn.onclick=()=>{s.straightToNext=!s.straightToNext;renderStops();rebuildRoute();toast(s.straightToNext?"📏 Ten odcinek pójdzie teraz linią prostą — niezależnie od reszty trasy.":"🛣️ Ten odcinek wraca do trasy po drogach.");};}attachAutocomplete(input,it=>{const ll=L.latLng(it.lat,it.lon);s.latlng=ll;s.address=it.main;if(s.marker)s.marker.setLatLng(ll);else makeStopMarker(s);input.value=s.address;renderStops();map.setView(ll,15);rebuildRoute();});wrap.appendChild(row);});renumberStops();}
 function moveStop(i,dir){const j=i+dir;if(j<0||j>=stops.length)return;const t=stops[i];stops[i]=stops[j];stops[j]=t;renderStops();rebuildRoute();}
 function renderTrackList(){const wrap=$("trackList");if(!wrap)return;wrap.innerHTML="";tracks.forEach(t=>{const isAct=activeTrack&&t.id===activeTrack.id;const row=document.createElement("div");row.className="trackrow"+(isAct?" act":"");const km=(t.meters/1000).toFixed(2).replace(".",",");row.innerHTML=`<span class="dotc" style="background:${t.color};cursor:pointer;width:12px;height:12px;border-radius:50%;flex:none;margin-left:4px"></span><input class="tname fld" value="${(t.name||"").replace(/"/g,"&quot;")}" style="flex:1;min-width:0"><span class="tkm" style="font-size:12px;color:#8fa0b0;white-space:nowrap">${km} km</span>`;const nameInp=row.querySelector(".tname");nameInp.onchange=()=>{t.name=nameInp.value;};nameInp.onclick=e=>e.stopPropagation();const actBtn=document.createElement("button");actBtn.className="mv";actBtn.textContent=isAct?"✏️":"✎";actBtn.title=isAct?"Edytujesz tę trasę":"Edytuj tę trasę";actBtn.onclick=e=>{e.stopPropagation();setActiveTrack(t.id);};row.appendChild(actBtn);if(tracks.length>1){const delBtn=document.createElement("button");delBtn.className="rm";delBtn.textContent="✕";delBtn.title="Usuń trasę";delBtn.onclick=e=>{e.stopPropagation();removeTrack(t.id);};row.appendChild(delBtn);}row.querySelector(".dotc").onclick=()=>setActiveTrack(t.id);wrap.appendChild(row);});}
 function addTrackUI(){const t=newTrack();setActiveTrack(t.id);setMode("route");toast("✏️ Nowa trasa („"+t.name+"”) — klikaj mapę, żeby ją rysować.");}
@@ -895,8 +910,47 @@ async function fetchRoute(coords){
       }
     }catch(e){}
   }
-  toast("Silniki trasy chwilowo niedostępne — linia prosta. Spróbuj ponownie.");
   return null;
+}
+// ---------- odcinki wymuszone jako linia prosta (niezależnie od reszty trasy) ----------
+// Dzieli listę przystanków na kolejne "biegi": odcinki do trasowania przez silnik (OSRM)
+// oraz pojedyncze odcinki oznaczone przez użytkownika jako s.straightToNext = true (zawsze linia prosta).
+function buildRouteSegments(validStops){
+  const segments=[];
+  let i=0;
+  while(i<validStops.length-1){
+    if(validStops[i].straightToNext){
+      segments.push({type:"straight",stops:[validStops[i],validStops[i+1]]});
+      i++;
+    }else{
+      let j=i;
+      while(j<validStops.length-1 && !validStops[j].straightToNext)j++;
+      segments.push({type:"run",stops:validStops.slice(i,j+1)});
+      i=j;
+    }
+  }
+  return segments;
+}
+async function computeSegmentsGeometry(segments){
+  let anyFailed=false;
+  const results=await Promise.all(segments.map(async seg=>{
+    if(seg.type==="straight"){
+      return{geometry:seg.stops.map(s=>[s.latlng.lat,s.latlng.lng]),meters:haversine(seg.stops[0].latlng,seg.stops[1].latlng)};
+    }
+    const res=await fetchRoute(seg.stops.map(s=>s.latlng));
+    if(res&&res.geometry&&res.geometry.length>=2)return res;
+    anyFailed=true;
+    const geometry=seg.stops.map(s=>[s.latlng.lat,s.latlng.lng]);
+    let m=0;for(let k=1;k<seg.stops.length;k++)m+=haversine(seg.stops[k-1].latlng,seg.stops[k].latlng);
+    return{geometry,meters:m};
+  }));
+  let geometry=[],totalM=0;
+  results.forEach((res,idx)=>{
+    if(idx>0&&geometry.length)geometry.pop();
+    geometry.push(...res.geometry);
+    totalM+=res.meters||0;
+  });
+  return{geometry,meters:totalM,anyFailed};
 }
 function redrawAllTrackLines(){tracks.forEach(t=>{if(t.line){map.removeLayer(t.line);t.line=null;}if(t.geometry&&t.geometry.length>=2){const isAct=activeTrack&&t.id===activeTrack.id;t.line=L.polyline(t.geometry,{color:t.color,weight:isAct?6:4,opacity:isAct?.95:.55,lineJoin:"round",interactive:false}).addTo(map);t.line.bringToBack();}});}
 let _rebuildGen=0;
@@ -937,22 +991,25 @@ async function rebuildRoute(){
   renderTrackList();
   const drawn=(activeTrack&&activeTrack.line)?"YES":"NO";
   console.log("[rebuild] straight line drawn: "+drawn+" (geom.len="+lastGeometry.length+", meters="+Math.round(totalMeters)+")");
-  // KROK 2: TERAZ SPRÓBUJ ULEPSZYĆ przez OSRM (async, w tle) — jeśli się uda, podmieni linię na routing po drogach
-  if(coords.length>=2 && snap){
+  // KROK 2: TERAZ SPRÓBUJ ULEPSZYĆ przez OSRM (async, w tle) — z poszanowaniem odcinków wymuszonych jako linia prosta
+  const validStopsForRoute=stops.filter(s=>s && s.latlng && isFinite(s.latlng.lat) && isFinite(s.latlng.lng));
+  if(validStopsForRoute.length>=2 && snap){
     const myGen=++_rebuildGen;
     try{
-      const res=await fetchRoute(coords);
+      const segments=buildRouteSegments(validStopsForRoute);
+      const {geometry,meters,anyFailed}=await computeSegmentsGeometry(segments);
       if(myGen!==_rebuildGen){ console.log("[rebuild osrm] abandoned (newer)"); return; }
-      if(res && res.geometry && Array.isArray(res.geometry) && res.geometry.length>=2){
-        console.log("[rebuild osrm] OK "+res.meters+"m/"+res.geometry.length+"pts — upgrading line");
-        lastGeometry=res.geometry;
-        totalMeters=res.meters||totalMeters;
+      if(geometry && geometry.length>=2){
+        console.log("[rebuild osrm] OK "+meters+"m/"+geometry.length+"pts — upgrading line");
+        lastGeometry=geometry;
+        totalMeters=meters||totalMeters;
         syncActive();
         redrawAllTrackLines();
         routeLine=activeTrack?activeTrack.line:null;
         drawKmMarkers();
         updateStats();
         updateTarget();
+        if(anyFailed)toast("Silnik trasy chwilowo niedostępny na części odcinków — użyto tam linii prostej. Spróbuj ponownie za chwilę.");
       } else {
         console.log("[rebuild osrm] no result — keeping straight line");
       }
@@ -1049,24 +1106,43 @@ function tagPoiIcon(p){const el=p.marker&&p.marker.getElement();if(el)el.classLi
 let activeSpreadGroup=null,spreadHoverT=null;
 function computeClusters(){
   const visible=pois.filter(p=>p.marker&&map.hasLayer(p.marker));
-  const items=visible.map(p=>({p,pt:map.latLngToContainerPoint(p.latlng)}));
+  const n=visible.length;
+  if(!n)return;
   const THRESH=22;
-  const used=new Set();
-  items.forEach((it,i)=>{
-    if(used.has(i))return;
-    const group=[it];used.add(i);
-    for(let pass=0;pass<items.length;pass++){
-      let grown=false;
-      items.forEach((jt,j)=>{
-        if(used.has(j))return;
-        const close=group.some(g=>Math.hypot(g.pt.x-jt.pt.x,g.pt.y-jt.pt.y)<THRESH);
-        if(close){group.push(jt);used.add(j);grown=true;}
-      });
-      if(!grown)break;
-    }
-    const arr=group.map(g=>g.p);
-    arr.forEach(p=>{p._cluster=arr;});
+  const pts=visible.map(p=>map.latLngToContainerPoint(p.latlng));
+  // podział na siatkę — porównujemy tylko punkty z sąsiednich komórek (szybkie nawet dla setek punktów)
+  const grid=new Map();
+  const cellKey=(cx,cy)=>cx+"_"+cy;
+  pts.forEach((pt,i)=>{
+    const cx=Math.floor(pt.x/THRESH),cy=Math.floor(pt.y/THRESH);
+    const k=cellKey(cx,cy);
+    if(!grid.has(k))grid.set(k,[]);
+    grid.get(k).push(i);
   });
+  const parent=new Array(n);
+  for(let i=0;i<n;i++)parent[i]=i;
+  function find(x){while(parent[x]!==x){parent[x]=parent[parent[x]];x=parent[x];}return x;}
+  function union(a,b){a=find(a);b=find(b);if(a!==b)parent[a]=b;}
+  for(let i=0;i<n;i++){
+    const cx=Math.floor(pts[i].x/THRESH),cy=Math.floor(pts[i].y/THRESH);
+    for(let dx=-1;dx<=1;dx++){
+      for(let dy=-1;dy<=1;dy++){
+        const arr=grid.get(cellKey(cx+dx,cy+dy));
+        if(!arr)continue;
+        for(const j of arr){
+          if(j<=i)continue;
+          if(Math.hypot(pts[i].x-pts[j].x,pts[i].y-pts[j].y)<THRESH)union(i,j);
+        }
+      }
+    }
+  }
+  const groups=new Map();
+  for(let i=0;i<n;i++){
+    const r=find(i);
+    if(!groups.has(r))groups.set(r,[]);
+    groups.get(r).push(visible[i]);
+  }
+  groups.forEach(arr=>{arr.forEach(p=>{p._cluster=arr;});});
 }
 function spreadGroup(group){
   const pts=group.map(p=>map.latLngToContainerPoint(p.latlng));
@@ -1107,7 +1183,7 @@ function attachSpreadHover(p){
 map.on("movestart zoomstart",()=>{clearTimeout(spreadHoverT);if(activeSpreadGroup){collapseGroup(activeSpreadGroup);activeSpreadGroup=null;}});
 map.on("zoomend moveend",()=>computeClusters());
 
-function addPoi(type,latlng,name){const id=idSeq++;const obj={id,type,latlng,name:name||"",note:""};obj.marker=L.marker(latlng,{icon:poiIcon(type),draggable:true}).addTo(map);tagPoiIcon(obj);attachSpreadHover(obj);obj.marker.on("dragend",()=>{obj.latlng=obj.marker.getLatLng();renderPoiList();});obj.marker.on("click",()=>{openEditor(id);highlightPoi(obj);});pois.push(obj);renderPoiList();updateStats();return obj;}
+function addPoi(type,latlng,name,silent){const id=idSeq++;const obj={id,type,latlng,name:name||"",note:""};obj.marker=L.marker(latlng,{icon:poiIcon(type),draggable:true}).addTo(map);tagPoiIcon(obj);attachSpreadHover(obj);obj.marker.on("dragend",()=>{obj.latlng=obj.marker.getLatLng();renderPoiList();});obj.marker.on("click",()=>{openEditor(id);highlightPoi(obj);});pois.push(obj);if(!silent){renderPoiList();updateStats();}return obj;}
 function renderPoiList(){const el=$("poiList");buildPoiFilterChips();if(pois.length===0){el.innerHTML='<div class="empty">Brak punktów. Wybierz typ powyżej i kliknij na mapie, albo rozmieść automatycznie.</div>';applyPoiVisibility();return;}const cps=pois.filter(p=>p.type==="checkpoint").map(p=>({p,km:kmAlong(p.latlng)??1e9})).sort((a,b)=>a.km-b.km);cps.forEach((x,i)=>x.p._cpNo=i+1);pois.forEach(p=>{p.marker.setIcon(poiIcon(p.type,p.type==="checkpoint"?p._cpNo:null));tagPoiIcon(p);});el.innerHTML="";let anyVisible=false;Object.keys(POI).forEach(type=>{const groupAll=pois.filter(p=>p.type===type);if(!groupAll.length)return;const group=groupAll.filter(poiIsVisible);if(!group.length)return;anyVisible=true;const head=document.createElement("div");head.className="poiGroupHead";head.style.borderLeft="4px solid "+POI[type].color;head.style.paddingLeft="8px";head.innerHTML=`<span class="ic">${POI[type].ic}</span><span class="gl">${POI[type].label}</span><span class="count" style="background:${POI[type].color}">${group.length}</span>`;el.appendChild(head);const sorted=group.map(p=>({p,km:kmAlong(p.latlng)})).sort((a,b)=>(a.km??1e9)-(b.km??1e9));sorted.forEach(({p,km})=>{const def=POI[p.type].label+(p.type==="checkpoint"?" "+p._cpNo:"");const display=p.name||def;const kmTxt=km!=null?km.toFixed(2).replace(".",",")+" km":"—";const item=document.createElement("div");item.className="poiItem";item.dataset.id=p.id;item.innerHTML=`<div class="head"><span class="ic">${POI[p.type].ic}</span><span class="nm">${display.replace(/</g,"&lt;")}</span><span class="km">${kmTxt}</span><button class="del" title="Usuń">✕</button></div><div class="edit"><input type="text" class="fld" placeholder="Nazwa (np. ${def})" value="${(p.name||"").replace(/"/g,"&quot;")}"><textarea class="fld" placeholder="Notatka — obsada, sprzęt, godziny otwarcia">${(p.note||"").replace(/</g,"&lt;")}</textarea><div style="border-top:1px dashed var(--line);margin-top:2px;padding-top:8px"><div style="font-size:10.5px;font-weight:600;color:var(--ink-dim);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">🙋 Przypisany wolontariusz (opcjonalnie)</div><div class="row" style="gap:6px"><input type="text" class="fld vol-num" placeholder="Numer" value="${(p.volNum||"").replace(/"/g,"&quot;")}" style="flex:none;width:78px"><input type="text" class="fld vol-name" placeholder="Imię i nazwisko" value="${(p.volName||"").replace(/"/g,"&quot;")}" style="flex:1"></div><div class="vol-confirm" style="font-size:11px;margin-top:7px;font-weight:600"></div></div></div>`;item.querySelector(".head").onclick=ev=>{if(ev.target.classList.contains("del")){map.removeLayer(p.marker);pois=pois.filter(x=>x.id!==p.id);renderPoiList();updateStats();return;}item.classList.toggle("open");if(item.classList.contains("open")){map.panTo(p.latlng);highlightPoi(p);}};const ni=item.querySelector("input"),ta=item.querySelector("textarea");ni.oninput=()=>{p.name=ni.value;item.querySelector(".nm").textContent=p.name||def;};ta.oninput=()=>{p.note=ta.value;};const volNumInp=item.querySelector(".vol-num"),volNameInp=item.querySelector(".vol-name"),volConfirm=item.querySelector(".vol-confirm");const refreshVolConfirm=()=>{const okNum=(p.volNum||"").trim(),okName=(p.volName||"").trim();if(okNum&&okName){volConfirm.style.color="var(--good)";volConfirm.textContent="✓ Zapisano — nr "+okNum+", "+okName;}else if(okNum||okName){volConfirm.style.color="var(--accent-2)";volConfirm.textContent="⚠ Uzupełnij oba pola (numer i imię), żeby przypisanie się liczyło.";}else{volConfirm.textContent="";}};refreshVolConfirm();if(volNumInp)volNumInp.oninput=()=>{p.volNum=volNumInp.value;refreshVolConfirm();updateVolAssignedCount();};if(volNameInp)volNameInp.oninput=()=>{p.volName=volNameInp.value;refreshVolConfirm();updateVolAssignedCount();};el.appendChild(item);});});if(!anyVisible)el.innerHTML='<div class="empty">Wszystkie punkty są odfiltrowane — włącz je w filtrze powyżej.</div>';applyPoiVisibility();}
 function openEditor(id){const item=document.querySelector(`.poiItem[data-id="${id}"]`);if(item){$("panel").classList.remove("collapsed");item.classList.add("open");item.scrollIntoView({behavior:"smooth",block:"center"});}}
 
@@ -1124,7 +1200,7 @@ function pxDistToGeom(latlng,geom){if(!geom||geom.length<2)return Infinity;const
 function pxDistToRoute(latlng){return pxDistToGeom(latlng,lastGeometry);}
 map.on("click",e=>{if(mode==="route"){let near=null,nd=18;tracks.forEach(t=>{if(activeTrack&&t.id===activeTrack.id)return;const d=pxDistToGeom(e.latlng,t.geometry);if(d<nd){nd=d;near=t;}});if(near){setActiveTrack(near.id);toast("Przełączono na: "+near.name);return;}if(stops.filter(s=>s.latlng).length>=2&&pxDistToRoute(e.latlng)<18)insertStopOnLine(e.latlng);else placeRouteStop(e.latlng);}else openTypeChooser(e.latlng);});
 
-$("distribBtn").onclick=()=>{if(lastGeometry.length<2){toast("Najpierw wyznacz trasę.");return;}const every=parseFloat($("cpEvery").value)*1000;if(!every||every<50){toast("Podaj odstęp większy niż 0,05 km.");return;}let added=0;for(let d=every;d<totalMeters;d+=every){addPoi("checkpoint",pointAtMeters(d));added++;}toast(added?`Rozmieszczono ${added} punktów kontrolnych`:"Trasa za krótka dla tego odstępu");};
+$("distribBtn").onclick=()=>{if(lastGeometry.length<2){toast("Najpierw wyznacz trasę.");return;}const every=parseFloat($("cpEvery").value)*1000;if(!every||every<50){toast("Podaj odstęp większy niż 0,05 km.");return;}let added=0;for(let d=every;d<totalMeters;d+=every){addPoi("checkpoint",pointAtMeters(d),null,true);added++;}if(added){renderPoiList();updateStats();}toast(added?`Rozmieszczono ${added} punktów kontrolnych`:"Trasa za krótka dla tego odstępu");};
 $("addStopBtn").onclick=()=>{setMode("route");ensureEndpoints();const s={id:idSeq++,latlng:null,address:"",marker:null};stops.splice(stops.length-1,0,s);renderStops();const ins=document.querySelectorAll("#stopsList input");if(ins.length>=2)ins[ins.length-2].focus();};
 $("poiChips").addEventListener("click",e=>{const b=e.target.closest(".chip");if(!b)return;poiType=b.dataset.type;[...e.currentTarget.children].forEach(c=>c.classList.toggle("on",c===b));setMode("poi");toast("🎯 Tryb: "+POI[poiType].label+". Klikaj mapę. Powrót → ✏️ Rysuj trasę u góry.");});
 $("snapToggle").addEventListener("click",function(){snap=!snap;this.classList.toggle("on",snap);rebuildRoute();});
@@ -1145,7 +1221,7 @@ sInput.addEventListener("focus",searchInfoText);
 sInput.addEventListener("input",()=>{clearTimeout(sTimer);const q=sInput.value.trim();if(q.length<3){sDrop.classList.remove("show");return;}sTimer=setTimeout(async()=>{searchInfoText();sSpin.textContent="…";try{const list=await geocode(q);sDrop.innerHTML="";if(!list.length)sDrop.innerHTML='<div class="res">Nic nie znaleziono. Dopisz miasto.</div>';else list.forEach(it=>{const el=document.createElement("div");el.className="res";el.innerHTML=`<span class="pin">📍</span><span class="t">${it.main.replace(/</g,"&lt;")}<small>${it.rest.replace(/</g,"&lt;")}</small></span>`;el.onclick=()=>{const ll=L.latLng(it.lat,it.lon);map.setView(ll,15);if(mode==="route")placeRouteStop(ll,it.main);else addPoi(poiType,ll);sDrop.classList.remove("show");sInput.value="";toast("Dodano: "+it.main);};sDrop.appendChild(el);});sDrop.classList.add("show");}catch(e){sDrop.innerHTML='<div class="res">Brak połączenia.</div>';sDrop.classList.add("show");}sSpin.textContent="";},550);});
 document.addEventListener("click",e=>{if(!$("searchWrap").contains(e.target))sDrop.classList.remove("show");});
 
-function serialize(){syncActive();return{v:4,name:$("projName").value,snap,activeTrack:activeTrack?activeTrack.id:null,tracks:tracks.map(t=>({id:t.id,name:t.name,color:t.color,stops:t.stops.filter(s=>s.latlng).map(s=>({lat:s.latlng.lat,lng:s.latlng.lng,address:s.address}))})),pois:pois.map(p=>({type:p.type,lat:p.latlng.lat,lng:p.latlng.lng,name:p.name,note:p.note,volNum:p.volNum||"",volName:p.volName||""}))};}
+function serialize(){syncActive();return{v:4,name:$("projName").value,snap,activeTrack:activeTrack?activeTrack.id:null,tracks:tracks.map(t=>({id:t.id,name:t.name,color:t.color,stops:t.stops.filter(s=>s.latlng).map(s=>({lat:s.latlng.lat,lng:s.latlng.lng,address:s.address,straight:!!s.straightToNext}))})),pois:pois.map(p=>({type:p.type,lat:p.latlng.lat,lng:p.latlng.lng,name:p.name,note:p.note,volNum:p.volNum||"",volName:p.volName||""}))};}
 $("saveBtn").onclick=()=>{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(serialize(),null,2)],{type:"application/json"}));a.download=($("projName").value||"projekt").replace(/[^\w-]+/g,"_")+".json";a.click();URL.revokeObjectURL(a.href);toast("Zapisano projekt ✓");};
 $("loadBtn").onclick=()=>$("fileInput").click();
 $("fileInput").onchange=async e=>{
@@ -1189,8 +1265,9 @@ async function loadProject(d,keepView){
   $("projName").value=d.name||"Wczytany projekt";
   if(typeof d.snap==="boolean"){snap=d.snap;$("snapToggle").classList.toggle("on",snap);}
   const trackDefs=(d.tracks&&d.tracks.length)?d.tracks:[{name:"Trasa 1",color:TRACK_COLORS[0],stops:(d.stops||d.waypoints||[])}];
-  trackDefs.forEach(td=>{const t=newTrack(td.name,td.color);if(td.id!=null){t.id=td.id;if(td.id>=idSeq)idSeq=td.id+1;}(td.stops||[]).forEach(w=>{const lat=parseFloat(w.lat), lng=parseFloat(w.lng);if(!isFinite(lat)||!isFinite(lng))return;const s={id:idSeq++,latlng:L.latLng(lat,lng),address:w.address||"",marker:null};t.stops.push(s);});});
-  (d.pois||[]).forEach(p=>{const lat=parseFloat(p.lat), lng=parseFloat(p.lng);if(!isFinite(lat)||!isFinite(lng)||!p.type||!POI[p.type])return;const o=addPoi(p.type,L.latLng(lat,lng),p.name);if(o){o.note=p.note||"";o.volNum=p.volNum||"";o.volName=p.volName||"";}});
+  trackDefs.forEach(td=>{const t=newTrack(td.name,td.color);if(td.id!=null){t.id=td.id;if(td.id>=idSeq)idSeq=td.id+1;}(td.stops||[]).forEach(w=>{const lat=parseFloat(w.lat), lng=parseFloat(w.lng);if(!isFinite(lat)||!isFinite(lng))return;const s={id:idSeq++,latlng:L.latLng(lat,lng),address:w.address||"",marker:null,straightToNext:!!w.straight};t.stops.push(s);});});
+  (d.pois||[]).forEach(p=>{const lat=parseFloat(p.lat), lng=parseFloat(p.lng);if(!isFinite(lat)||!isFinite(lng)||!p.type||!POI[p.type])return;const o=addPoi(p.type,L.latLng(lat,lng),p.name,true);if(o){o.note=p.note||"";o.volNum=p.volNum||"";o.volName=p.volName||"";}});
+  if((d.pois||[]).length){renderPoiList();updateStats();}
   for(const t of tracks){const coords=t.stops.filter(s=>s.latlng).map(s=>s.latlng);t.geometry=[];t.meters=0;if(coords.length>=2){if(snap){const res=await fetchRoute(coords);if(res){t.meters=res.meters;t.geometry=res.geometry;}}if(t.geometry.length===0){t.geometry=coords.map(c=>[c.lat,c.lng]);for(let i=1;i<coords.length;i++)t.meters+=haversine(coords[i-1],coords[i]);}}}
   const wantId=(d.activeTrack&&tracks.find(t=>t.id===d.activeTrack))?d.activeTrack:tracks[0].id;
   activeTrack=tracks.find(t=>t.id===wantId);stops=activeTrack.stops;lastGeometry=activeTrack.geometry;totalMeters=activeTrack.meters;
