@@ -417,7 +417,7 @@
         <div class="lbl">Projekt</div>
         <input id="projName" type="text" class="fld" placeholder="Nazwa wydarzenia" value="Moje wydarzenie" style="font-weight:600;margin-bottom:8px">
         <div class="row"><button class="btn primary" id="saveBtn">💾 Zapisz</button><button class="btn" id="loadBtn">📂 Wczytaj</button><button class="btn" id="newBtn" style="flex:none;width:46px">＋</button></div>
-        <input type="file" id="fileInput" accept=".json,application/json" style="display:none">
+        <input type="file" id="fileInput" accept=".json,.gpx,application/json,application/gpx+xml" style="display:none">
       </div>
       <div class="group">
         <div class="lbl">Udostępnij wspólnikowi</div>
@@ -888,16 +888,17 @@ async function fetchRoute(coords){
   const extra=`&radiuses=${radiuses}&continue_straight=true`;
   const providers=[
     `https://routing.openstreetmap.de/routed-foot/route/v1/foot/${pairs}?overview=full&geometries=geojson${extra}`,
-    `https://router.project-osrm.org/route/v1/driving/${pairs}?overview=full&geometries=geojson${extra}`,
-    `https://routing.openstreetmap.de/routed-bike/route/v1/bike/${pairs}?overview=full&geometries=geojson${extra}`,
-    // wersje zapasowe bez ograniczeń — gdyby zbyt ciasny promień uniemożliwił znalezienie trasy
+    // ten sam profil pieszy, ale bez ograniczenia promienia — na wypadek gdyby ciasny promień nie znalazł drogi
     `https://routing.openstreetmap.de/routed-foot/route/v1/foot/${pairs}?overview=full&geometries=geojson`,
-    `https://router.project-osrm.org/route/v1/driving/${pairs}?overview=full&geometries=geojson`,
-    `https://routing.openstreetmap.de/routed-bike/route/v1/bike/${pairs}?overview=full&geometries=geojson`
+    `https://router.project-osrm.org/route/v1/driving/${pairs}?overview=full&geometries=geojson${extra}`,
+    `https://routing.openstreetmap.de/routed-bike/route/v1/bike/${pairs}?overview=full&geometries=geojson${extra}`
   ];
   for(const url of providers){
     try{
-      const r=await fetch(url);
+      const ctrl=new AbortController();
+      const timer=setTimeout(()=>ctrl.abort(),8000); // maks. 8 s na jedną próbę — dalej nie czekamy
+      let r;
+      try{ r=await fetch(url,{signal:ctrl.signal}); } finally{ clearTimeout(timer); }
       if(!r.ok)continue;
       const j=await r.json();
       if(j.routes&&j.routes[0]&&j.routes[0].geometry&&j.routes[0].geometry.coordinates.length>1){
@@ -1179,8 +1180,23 @@ $("saveBtn").onclick=()=>{const a=document.createElement("a");a.href=URL.createO
 $("loadBtn").onclick=()=>$("fileInput").click();
 $("fileInput").onchange=async e=>{
   const f=e.target.files[0];if(!f)return;
+  const isGPX=/\.gpx$/i.test(f.name)||f.type==="application/gpx+xml";
   const rd=new FileReader();
   rd.onerror=()=>{ toast("Nie udało się odczytać pliku (błąd systemu)."); };
+  if(isGPX){
+    rd.onload=()=>{
+      try{
+        const res=loadProjectFromGPXText(rd.result,f.name);
+        toast("Wczytano GPX ✓ ("+res.stopsCount+" pkt trasy"+(res.poiCount?", "+res.poiCount+" punktów":"")+")");
+      }catch(err){
+        toast("Błąd wczytywania GPX: "+(err&&err.message||err));
+        console.error("GPX import error:",err);
+      }
+      e.target.value="";
+    };
+    rd.readAsText(f);
+    return;
+  }
   rd.onload=async()=>{
     let data;
     try{ data=JSON.parse(rd.result); }
@@ -1221,11 +1237,33 @@ async function loadProject(d,keepView){
   trackDefs.forEach(td=>{const t=newTrack(td.name,td.color);if(td.id!=null){t.id=td.id;if(td.id>=idSeq)idSeq=td.id+1;}(td.stops||[]).forEach(w=>{const lat=parseFloat(w.lat), lng=parseFloat(w.lng);if(!isFinite(lat)||!isFinite(lng))return;const s={id:idSeq++,latlng:L.latLng(lat,lng),address:w.address||"",marker:null};t.stops.push(s);});});
   (d.pois||[]).forEach(p=>{const lat=parseFloat(p.lat), lng=parseFloat(p.lng);if(!isFinite(lat)||!isFinite(lng)||!p.type||!POI[p.type])return;const o=addPoi(p.type,L.latLng(lat,lng),p.name,true);if(o){o.note=p.note||"";o.volNum=p.volNum||"";o.volName=p.volName||"";}});
   if((d.pois||[]).length){renderPoiList();updateStats();}
-  for(const t of tracks){const coords=t.stops.filter(s=>s.latlng).map(s=>s.latlng);t.geometry=[];t.meters=0;if(coords.length>=2){if(snap){const res=await fetchRoute(coords);if(res){t.meters=res.meters;t.geometry=res.geometry;}}if(t.geometry.length===0){t.geometry=coords.map(c=>[c.lat,c.lng]);for(let i=1;i<coords.length;i++)t.meters+=haversine(coords[i-1],coords[i]);}}}
+  // Szybka linia prosta dla WSZYSTKICH tras — bez żadnego zapytania sieciowego, natychmiastowy podgląd.
+  tracks.forEach(t=>{
+    const coords=t.stops.filter(s=>s.latlng).map(s=>s.latlng);
+    t.geometry=[];t.meters=0;
+    if(coords.length>=2){
+      t.geometry=coords.map(c=>[c.lat,c.lng]);
+      for(let i=1;i<coords.length;i++)t.meters+=haversine(coords[i-1],coords[i]);
+    }
+  });
   const wantId=(d.activeTrack&&tracks.find(t=>t.id===d.activeTrack))?d.activeTrack:tracks[0].id;
   activeTrack=tracks.find(t=>t.id===wantId);stops=activeTrack.stops;lastGeometry=activeTrack.geometry;totalMeters=activeTrack.meters;
   stops.forEach(s=>{if(s.latlng)makeStopMarker(s);});
+  // rebuildRoute() sam narysuje linię prostą natychmiast, a w tle dociągnie właściwą trasę po drogach — TYLKO dla aktywnej trasy
   renderTrackList();renderStops();await rebuildRoute();
+  // Pozostałe trasy (jeśli projekt ma ich kilka) dociągamy po drogach w tle, bez blokowania interfejsu
+  if(snap){
+    tracks.filter(t=>t!==activeTrack).forEach(async t=>{
+      const coords=t.stops.filter(s=>s.latlng).map(s=>s.latlng);
+      if(coords.length<2)return;
+      const res=await fetchRoute(coords);
+      if(res&&res.geometry&&res.geometry.length>=2){
+        t.geometry=res.geometry;t.meters=res.meters;
+        redrawAllTrackLines();
+        updateStats();
+      }
+    });
+  }
   updateVolAssignedCount();
   if(!keepView){fitToRoute();setTimeout(fitToRoute,250);}
 }
@@ -1518,6 +1556,82 @@ async function exportGPX(){
   }
 }
 $("gpxBtn").onclick=exportGPX;
+
+// ---------- import GPX (wczytanie gotowego pliku .gpx do projektu) ----------
+function gpxTypeFromSym(sym){
+  if(!sym)return "poi";
+  const s=sym.toLowerCase();
+  for(const [type,symName] of Object.entries(GPX_SYM)){ if(symName.toLowerCase()===s)return type; }
+  if(s.includes("water"))return "water";
+  if(s.includes("restaurant")||s.includes("food"))return "food";
+  if(s.includes("restroom")||s.includes("toilet"))return "wc";
+  if(s.includes("medical"))return "medic";
+  if(s.includes("hospital"))return "ambulance";
+  if(s.includes("police"))return "police";
+  if(s.includes("parking"))return "parking";
+  if(s.includes("flag"))return "checkpoint";
+  return "poi";
+}
+function loadProjectFromGPXText(text,filename){
+  const doc=new DOMParser().parseFromString(text,"application/xml");
+  if(doc.querySelector("parsererror"))throw new Error("Nieprawidłowy plik GPX (błąd XML).");
+  if(!doc.querySelector("gpx"))throw new Error("To nie jest plik GPX.");
+  clearTracksFromMap();tracks=[];trackSeq=1;pois.forEach(p=>map.removeLayer(p.marker));pois=[];
+  poiVisibleTypes=null;volOnlyFilter=false;{const vt=$("volOnlyToggle");if(vt)vt.classList.remove("on");}
+  const filterWrap=$("poiFilterChips");if(filterWrap)delete filterWrap.dataset.seen;
+  const metaName=doc.querySelector("metadata>name");
+  $("projName").value=(metaName&&metaName.textContent.trim())||filename.replace(/\.gpx$/i,"")||"Wczytany GPX";
+  let poiCount=0;
+  doc.querySelectorAll("wpt").forEach(w=>{
+    const lat=parseFloat(w.getAttribute("lat")),lng=parseFloat(w.getAttribute("lon"));
+    if(!isFinite(lat)||!isFinite(lng))return;
+    const nameEl=w.querySelector("name"),descEl=w.querySelector("desc"),symEl=w.querySelector("sym");
+    const type=gpxTypeFromSym(symEl&&symEl.textContent);
+    const o=addPoi(type,L.latLng(lat,lng),nameEl?nameEl.textContent.trim():"",true);
+    if(o&&descEl)o.note=descEl.textContent.trim();
+    poiCount++;
+  });
+  if(poiCount){renderPoiList();updateStats();}
+  const trkEls=[...doc.querySelectorAll("trk")];
+  let stopsCount=0;
+  if(!trkEls.length){
+    activeTrack=newTrack("Trasa 1",TRACK_COLORS[0]);
+    stops=activeTrack.stops;lastGeometry=[];totalMeters=0;
+  }else{
+    trkEls.forEach((trkEl,ti)=>{
+      const nameEl=trkEl.querySelector("name");
+      const t=newTrack(nameEl?nameEl.textContent.trim():("Trasa "+(ti+1)),TRACK_COLORS[ti%TRACK_COLORS.length]);
+      const pts=[...trkEl.querySelectorAll("trkpt")].map(pt=>[parseFloat(pt.getAttribute("lat")),parseFloat(pt.getAttribute("lon"))]).filter(c=>isFinite(c[0])&&isFinite(c[1]));
+      t.geometry=pts;
+      let m=0;for(let i=1;i<pts.length;i++)m+=haversine({lat:pts[i-1][0],lng:pts[i-1][1]},{lat:pts[i][0],lng:pts[i][1]});
+      t.meters=m;
+      // downsample do max ~14 przystanków, żeby dało się je edytować/przeciągać (bez psucia dokładności rysowanej linii)
+      const maxStops=14;
+      const stepIdx=Math.max(1,Math.floor((pts.length-1)/(maxStops-1)));
+      const idxList=[];
+      for(let i=0;i<pts.length;i+=stepIdx)idxList.push(i);
+      if(pts.length&&idxList[idxList.length-1]!==pts.length-1)idxList.push(pts.length-1);
+      idxList.forEach(i=>{
+        const s={id:idSeq++,latlng:L.latLng(pts[i][0],pts[i][1]),address:"",marker:null};
+        t.stops.push(s);
+        stopsCount++;
+      });
+    });
+    activeTrack=tracks[0];
+    stops=activeTrack.stops;lastGeometry=activeTrack.geometry;totalMeters=activeTrack.meters;
+  }
+  stops.forEach(s=>{if(s.latlng)makeStopMarker(s);});
+  renderTrackList();renderStops();
+  redrawAllTrackLines();
+  routeLine=activeTrack.line;
+  drawKmMarkers();
+  renderPoiList();
+  updateStats();
+  updateTarget();
+  updateVolAssignedCount();
+  fitToRoute();setTimeout(fitToRoute,250);
+  return{stopsCount,poiCount,tracksCount:trkEls.length};
+}
 
 
 // ===== EKSPORT PNG =====
