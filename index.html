@@ -18,6 +18,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css">
 <style>
   :root{
     --bg:#0a0e13;
@@ -515,6 +516,12 @@
         <p class="hint">Strefa to podkolorowany, pogrubiony odcinek trasy między dwoma kilometrami — np. „Strefa wody 1,0–1,5 km” albo „Strefa mety”. Widoczna na mapie razem z podpisem. Dotyczy aktywnej trasy (patrz sekcja „Trasy — warianty / kolory” wyżej).</p>
       </div>
       <div class="group">
+        <div class="lbl">Obszary na mapie</div>
+        <button class="btn primary" id="areaDrawBtn">🖐 Zaznacz obszar (przeciągnij na mapie)</button>
+        <div id="areaList" style="margin-top:8px;display:flex;flex-direction:column;gap:6px"></div>
+        <p class="hint">Kliknij, potem naciśnij i przeciągnij na mapie, żeby narysować prostokąt — niezależnie od trasy, gdziekolwiek chcesz (np. parking, strefa startu, teren zamknięty). Po narysowaniu kliknij „✏️ Edytuj” przy obszarze na liście, żeby przeciągać każdy bok/narożnik i dopasować kształt — kliknij „✏️ Edytuj” jeszcze raz, żeby zakończyć edycję.</p>
+      </div>
+      <div class="group">
         <div class="lbl">Stawiaj punkty na mapie</div>
         <p class="hint" style="margin-top:0;margin-bottom:9px">Wybierz typ, potem kliknij na mapie lub użyj wyszukiwarki u góry.</p>
         <div class="chips" id="poiChips"></div>
@@ -694,6 +701,7 @@
   </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
@@ -1081,6 +1089,58 @@ $("zoneAddBtn").onclick=()=>{
   redrawZones();renderZoneList();
   toast("Dodano strefę „"+name+"”.");
 };
+// ---------- obszary na mapie (dowolny prostokąt — przeciągnij i modyfikuj boki) ----------
+let mapAreas=[],areaDrawing=false,areaDrawer=null;
+$("areaDrawBtn").onclick=()=>{
+  if(typeof L==="undefined"||!L.Draw){toast("Narzędzie rysowania nie wczytało się — sprawdź internet i odśwież stronę.");return;}
+  if(areaDrawing)return;
+  areaDrawing=true;
+  areaDrawer=new L.Draw.Rectangle(map,{shapeOptions:{color:"#3da5f4",weight:3,fillOpacity:.18}});
+  areaDrawer.enable();
+  toast("🖐 Naciśnij i przeciągnij na mapie, żeby narysować obszar. ESC = anuluj.");
+};
+map.on(L.Draw.Event.CREATED,e=>{
+  areaDrawing=false;
+  const layer=e.layer.addTo(map);
+  const color="#3da5f4";
+  const area={id:idSeq++,name:"Obszar "+(mapAreas.length+1),color,layer,_editing:false};
+  mapAreas.push(area);
+  renderAreaList();
+  toast("Dodano obszar — nadaj mu nazwę na liście poniżej.");
+});
+map.on("draw:drawstop",()=>{areaDrawing=false;});
+function renderAreaList(){
+  const wrap=$("areaList");if(!wrap)return;
+  if(!mapAreas.length){wrap.innerHTML='<div class="empty">Brak obszarów. Kliknij przycisk powyżej, żeby narysować pierwszy.</div>';return;}
+  wrap.innerHTML="";
+  mapAreas.forEach(a=>{
+    const row=document.createElement("div");
+    row.style.cssText="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--panel-2);border:1px solid var(--line);border-radius:8px";
+    row.innerHTML=`<input type="color" value="${a.color}" style="width:30px;height:30px;border:1px solid var(--line);border-radius:6px;padding:1px;cursor:pointer;flex:none;background:var(--panel-2)"><input type="text" class="fld aname" value="${(a.name||"").replace(/"/g,"&quot;")}" style="flex:1;font-size:12.5px;padding:7px 9px"><button class="mv aedit" title="Edytuj kształt">✏️</button><button class="del" title="Usuń">✕</button>`;
+    const colorInp=row.querySelector('input[type="color"]');
+    colorInp.oninput=()=>{a.color=colorInp.value;a.layer.setStyle({color:a.color});};
+    const nameInp=row.querySelector(".aname");
+    nameInp.oninput=()=>{a.name=nameInp.value;};
+    const editBtn=row.querySelector(".aedit");
+    editBtn.onclick=()=>{
+      if(!a.layer.editing){toast("Ten obszar nie wspiera edycji — odśwież stronę i spróbuj ponownie.");return;}
+      if(a._editing){a.layer.editing.disable();a._editing=false;editBtn.style.borderColor="";editBtn.style.color="";toast("Zakończono edycję obszaru.");}
+      else{
+        mapAreas.forEach(o=>{if(o!==a&&o._editing){o.layer.editing.disable();o._editing=false;}});
+        a.layer.editing.enable();a._editing=true;editBtn.style.borderColor="var(--accent)";editBtn.style.color="var(--accent-2)";
+        toast("Przeciągaj narożniki/boki, żeby zmienić kształt. Kliknij ✏️ jeszcze raz, żeby zakończyć.");
+      }
+    };
+    row.querySelector(".del").onclick=()=>{
+      if(a._editing)a.layer.editing.disable();
+      map.removeLayer(a.layer);
+      mapAreas=mapAreas.filter(x=>x.id!==a.id);
+      renderAreaList();
+      toast("Usunięto obszar.");
+    };
+    wrap.appendChild(row);
+  });
+}
 function updateStats(){syncActive();const sum=tracks.reduce((a,t)=>a+(t.meters||0),0);$("distVal").textContent=(sum/1000).toFixed(2).replace(".",",");const db=$("distBadge");if(db)db.textContent=(tracks.length>1?"📏 Suma: ":"📏 Trasa: ")+(sum/1000).toFixed(2).replace(".",",")+" km"+(tracks.length>1&&activeTrack?" (tu: "+(totalMeters/1000).toFixed(2).replace(".",",")+")":"");$("cpVal").textContent=pois.filter(p=>p.type==="checkpoint").length;$("poiCount").textContent=pois.length;$("listCount").textContent=pois.length;$("clearPoiBtn").disabled=pois.length===0;$("gpxBtn").disabled=lastGeometry.length<2&&pois.length===0;const _pngBtn=$("pngBtn");if(_pngBtn)_pngBtn.disabled=!tracks.some(t=>t.geometry&&t.geometry.length>=2);const _playBtn=$("playRouteBtn");if(_playBtn)_playBtn.disabled=!tracks.some(t=>t.geometry&&t.geometry.length>=2);const _vidBtn=$("videoDownloadBtn");if(_vidBtn)_vidBtn.disabled=!tracks.some(t=>t.geometry&&t.geometry.length>=2);try{updateTime();}catch(e){}}
 
 // ---------- podświetlanie zaznaczonego punktu (lista <-> mapa) ----------
@@ -1266,7 +1326,7 @@ sInput.addEventListener("focus",searchInfoText);
 sInput.addEventListener("input",()=>{clearTimeout(sTimer);const q=sInput.value.trim();if(q.length<3){sDrop.classList.remove("show");return;}sTimer=setTimeout(async()=>{searchInfoText();sSpin.textContent="…";try{const list=await geocode(q);sDrop.innerHTML="";if(!list.length)sDrop.innerHTML='<div class="res">Nic nie znaleziono. Dopisz miasto.</div>';else list.forEach(it=>{const el=document.createElement("div");el.className="res";el.innerHTML=`<span class="pin">📍</span><span class="t">${it.main.replace(/</g,"&lt;")}<small>${it.rest.replace(/</g,"&lt;")}</small></span>`;el.onclick=()=>{const ll=L.latLng(it.lat,it.lon);map.setView(ll,15);if(mode==="route")placeRouteStop(ll,it.main);else addPoi(poiType,ll);sDrop.classList.remove("show");sInput.value="";toast("Dodano: "+it.main);};sDrop.appendChild(el);});sDrop.classList.add("show");}catch(e){sDrop.innerHTML='<div class="res">Brak połączenia.</div>';sDrop.classList.add("show");}sSpin.textContent="";},550);});
 document.addEventListener("click",e=>{if(!$("searchWrap").contains(e.target))sDrop.classList.remove("show");});
 
-function serialize(){syncActive();return{v:4,name:$("projName").value,snap,activeTrack:activeTrack?activeTrack.id:null,tracks:tracks.map(t=>({id:t.id,name:t.name,color:t.color,stops:t.stops.filter(s=>s.latlng).map(s=>({lat:s.latlng.lat,lng:s.latlng.lng,address:s.address})),zones:(t.zones||[]).map(z=>({name:z.name,color:z.color,startKm:z.startKm,endKm:z.endKm}))})),pois:pois.map(p=>({type:p.type,lat:p.latlng.lat,lng:p.latlng.lng,name:p.name,note:p.note,volNum:p.volNum||"",volName:p.volName||""}))};}
+function serialize(){syncActive();return{v:4,name:$("projName").value,snap,activeTrack:activeTrack?activeTrack.id:null,tracks:tracks.map(t=>({id:t.id,name:t.name,color:t.color,stops:t.stops.filter(s=>s.latlng).map(s=>({lat:s.latlng.lat,lng:s.latlng.lng,address:s.address})),zones:(t.zones||[]).map(z=>({name:z.name,color:z.color,startKm:z.startKm,endKm:z.endKm}))})),pois:pois.map(p=>({type:p.type,lat:p.latlng.lat,lng:p.latlng.lng,name:p.name,note:p.note,volNum:p.volNum||"",volName:p.volName||""})),areas:mapAreas.map(a=>{const b=a.layer.getBounds();return{name:a.name,color:a.color,bounds:[[b.getSouthWest().lat,b.getSouthWest().lng],[b.getNorthEast().lat,b.getNorthEast().lng]]};})};}
 $("saveBtn").onclick=()=>{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(serialize(),null,2)],{type:"application/json"}));a.download=($("projName").value||"projekt").replace(/[^\w-]+/g,"_")+".json";a.click();URL.revokeObjectURL(a.href);toast("Zapisano projekt ✓");};
 $("loadBtn").onclick=()=>$("fileInput").click();
 $("fileInput").onchange=async e=>{
@@ -1316,10 +1376,11 @@ $("fileInput").onchange=async e=>{
 };
 $("newBtn").onclick=()=>{if((stops.some(s=>s.latlng)||pois.length)&&!confirm("Wyczyścić bieżący projekt?"))return;clearAll();$("projName").value="Moje wydarzenie";toast("Nowy projekt");};
 function clearTracksFromMap(){tracks.forEach(t=>{if(t.line){map.removeLayer(t.line);t.line=null;}t.stops.forEach(s=>{if(s.marker){map.removeLayer(s.marker);s.marker=null;}});});}
-function clearAll(){clearTracksFromMap();tracks=[];trackSeq=1;pois.forEach(p=>map.removeLayer(p.marker));pois=[];poiVisibleTypes=null;volOnlyFilter=false;const vt=$("volOnlyToggle");if(vt)vt.classList.remove("on");activeTrack=newTrack();stops=activeTrack.stops;lastGeometry=[];totalMeters=0;renderTrackList();renderStops();rebuildRoute();}
+function clearAll(){clearTracksFromMap();tracks=[];trackSeq=1;pois.forEach(p=>map.removeLayer(p.marker));pois=[];poiVisibleTypes=null;volOnlyFilter=false;const vt=$("volOnlyToggle");if(vt)vt.classList.remove("on");mapAreas.forEach(a=>{if(a._editing)a.layer.editing.disable();map.removeLayer(a.layer);});mapAreas=[];renderAreaList();activeTrack=newTrack();stops=activeTrack.stops;lastGeometry=[];totalMeters=0;renderTrackList();renderStops();rebuildRoute();}
 function fitToRoute(){syncActive();const all=[];tracks.forEach(t=>t.stops.forEach(s=>{if(s.latlng)all.push(s.latlng);}));pois.forEach(p=>all.push(p.latlng));if(!all.length){toast("Brak punktów na trasie.");return;}map.invalidateSize();const b=L.latLngBounds(all).pad(0.25);if(all.length===1)map.setView(all[0],15);else map.fitBounds(b);}
 async function loadProject(d,keepView){
   clearTracksFromMap();tracks=[];trackSeq=1;pois.forEach(p=>map.removeLayer(p.marker));pois=[];
+  mapAreas.forEach(a=>{if(a._editing)a.layer.editing.disable();map.removeLayer(a.layer);});mapAreas=[];
   poiVisibleTypes=null;volOnlyFilter=false;{const vt=$("volOnlyToggle");if(vt)vt.classList.remove("on");}
   const filterWrap=$("poiFilterChips");if(filterWrap)delete filterWrap.dataset.seen;
   $("projName").value=d.name||"Wczytany projekt";
@@ -1328,6 +1389,14 @@ async function loadProject(d,keepView){
   trackDefs.forEach(td=>{const t=newTrack(td.name,td.color);if(td.id!=null){t.id=td.id;if(td.id>=idSeq)idSeq=td.id+1;}(td.stops||[]).forEach(w=>{const lat=parseFloat(w.lat), lng=parseFloat(w.lng);if(!isFinite(lat)||!isFinite(lng))return;const s={id:idSeq++,latlng:L.latLng(lat,lng),address:w.address||"",marker:null};t.stops.push(s);});t.zones=(td.zones||[]).filter(z=>z&&isFinite(z.startKm)&&isFinite(z.endKm)).map(z=>({id:idSeq++,name:z.name||"Strefa",color:z.color||"#3da5f4",startKm:z.startKm,endKm:z.endKm}));});
   (d.pois||[]).forEach(p=>{const lat=parseFloat(p.lat), lng=parseFloat(p.lng);if(!isFinite(lat)||!isFinite(lng)||!p.type||!POI[p.type])return;const o=addPoi(p.type,L.latLng(lat,lng),p.name,true);if(o){o.note=p.note||"";o.volNum=p.volNum||"";o.volName=p.volName||"";}});
   if((d.pois||[]).length){renderPoiList();updateStats();}
+  (d.areas||[]).forEach(a=>{
+    if(!a.bounds)return;
+    try{
+      const layer=L.rectangle(a.bounds,{color:a.color||"#3da5f4",weight:3,fillOpacity:.18}).addTo(map);
+      mapAreas.push({id:idSeq++,name:a.name||"Obszar",color:a.color||"#3da5f4",layer,_editing:false});
+    }catch(e){}
+  });
+  renderAreaList();
   // Szybka linia prosta dla WSZYSTKICH tras — bez żadnego zapytania sieciowego, natychmiastowy podgląd.
   tracks.forEach(t=>{
     const coords=t.stops.filter(s=>s.latlng).map(s=>s.latlng);
@@ -2404,7 +2473,7 @@ setTimeout(()=>{
 mergeCustomIntoPOI();
 setTimeout(()=>{ renderCustomPoiList(); buildChips(); }, 150);
 renderTrackList();
-renderStops();updateStats();searchInfoText();updateVolAssignedCount();renderZoneList();
+renderStops();updateStats();searchInfoText();updateVolAssignedCount();renderZoneList();renderAreaList();
 $("fitBtn").onclick=fitToRoute;
 $("addTrackBtn").onclick=async()=>{
   const hasContent=tracks.some(t=>t.stops && t.stops.some(s=>s.latlng)) || pois.length;
