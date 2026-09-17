@@ -498,6 +498,23 @@
         <div class="switch" style="margin-top:8px"><div><span>Słupki kilometrowe</span><small>Znaczniki co 1 km na mapie</small></div><div class="toggle" id="kmToggle"></div></div>
       </div>
       <div class="group">
+        <div class="lbl">Strefy na trasie</div>
+        <div class="distrib">
+          <div class="ttl">Zaznacz odcinek trasy (od–do km)</div>
+          <div class="row" style="gap:6px;margin-bottom:8px">
+            <input type="number" id="zoneFrom" min="0" step="0.01" placeholder="od km" style="width:100%;background:var(--bg);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:9px;text-align:center;font-weight:600">
+            <input type="number" id="zoneTo" min="0" step="0.01" placeholder="do km" style="width:100%;background:var(--bg);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:9px;text-align:center;font-weight:600">
+          </div>
+          <input type="text" id="zoneName" class="fld" placeholder="Nazwa strefy (np. Strefa wody)" style="margin-bottom:8px">
+          <div class="row" style="gap:6px;align-items:stretch">
+            <input type="color" id="zoneColor" value="#3da5f4" style="width:46px;height:38px;border:1px solid var(--line);border-radius:8px;padding:2px;cursor:pointer;background:var(--panel-2);flex:none">
+            <button class="btn primary" id="zoneAddBtn" style="flex:1">➕ Dodaj strefę</button>
+          </div>
+        </div>
+        <div id="zoneList" style="margin-top:8px;display:flex;flex-direction:column;gap:6px"></div>
+        <p class="hint">Strefa to podkolorowany, pogrubiony odcinek trasy między dwoma kilometrami — np. „Strefa wody 1,0–1,5 km” albo „Strefa mety”. Widoczna na mapie razem z podpisem. Dotyczy aktywnej trasy (patrz sekcja „Trasy — warianty / kolory” wyżej).</p>
+      </div>
+      <div class="group">
         <div class="lbl">Stawiaj punkty na mapie</div>
         <p class="hint" style="margin-top:0;margin-bottom:9px">Wybierz typ, potem kliknij na mapie lub użyj wyszukiwarki u góry.</p>
         <div class="chips" id="poiChips"></div>
@@ -705,7 +722,7 @@ const TRACK_COLORS=["#ff6b1a","#2f7bff","#33c27a","#e23b4e","#9b59b6","#f1c40f",
 let tracks=[], activeTrack=null;
 let stops=[], pois=[], routeLine=null, routeHit=null, kmLayer=null, idSeq=1, lastGeometry=[], totalMeters=0;
 let trackSeq=1;
-function newTrack(name,color){const t={id:idSeq++,name:name||("Trasa "+trackSeq),color:color||TRACK_COLORS[(trackSeq-1)%TRACK_COLORS.length],stops:[],geometry:[],meters:0,line:null};trackSeq++;tracks.push(t);return t;}
+function newTrack(name,color){const t={id:idSeq++,name:name||("Trasa "+trackSeq),color:color||TRACK_COLORS[(trackSeq-1)%TRACK_COLORS.length],stops:[],geometry:[],meters:0,line:null,zones:[]};trackSeq++;tracks.push(t);return t;}
 function syncActive(){if(activeTrack){activeTrack.stops=stops;activeTrack.geometry=lastGeometry;activeTrack.meters=totalMeters;}}
 function setActiveTrack(id){
   syncActive();
@@ -738,6 +755,10 @@ const FIREBASE_CONFIG = {
 };
 const LIVE_PALETTE=["#ff6b1a","#3da5f4","#33c27a","#9b5de5","#f4b43d","#e23b4e","#16c8c8","#ff7ab6"];
 const toast=m=>{const t=$("toast");t.textContent=m;t.classList.add("show");clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove("show"),2800);};
+// Niektóre strony/CMS (WordPress, edytory, komunikatory) zamieniają znak "+" w linku na spację albo je koduje —
+// to psuje zaszyty w linku projekt. Kodujemy przy tworzeniu linku i bezpiecznie dekodujemy przy odczycie
+// (dekodowanie starych, nieszczędzonych linków jest bezpieczne — nic się w nich nie zmienia).
+function safeDecodeHash(s){try{return decodeURIComponent(s);}catch(e){return s;}}
 
 function waypointIcon(n){return L.divIcon({className:"",iconSize:[24,24],iconAnchor:[12,12],html:`<div style="width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,#ff8a3d,#ff6b1a);color:#fff;border:2px solid #fff;display:flex;align-items:center;justify-content:center;font:700 12px sans-serif;box-shadow:0 1px 5px #0007">${n}</div>`});}
 function poiIcon(type,badge){const p=POI[type];const b=badge?`<div style="position:absolute;top:-7px;right:-7px;background:#fff;color:${p.color};border:1.5px solid ${p.color};border-radius:9px;min-width:16px;height:16px;font:700 9px sans-serif;display:flex;align-items:center;justify-content:center;padding:0 3px;transform:rotate(45deg)">${badge}</div>`:"";return L.divIcon({className:"",iconSize:[30,30],iconAnchor:[15,30],html:`<div style="position:relative;width:30px;height:30px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:${p.color};border:2px solid #fff;box-shadow:0 2px 5px #0007;display:flex;align-items:center;justify-content:center"><span style="transform:rotate(45deg);font-size:14px">${p.ic}</span>${b}</div>`});}
@@ -946,6 +967,7 @@ async function rebuildRoute(){
   redrawAllTrackLines();
   routeLine=activeTrack?activeTrack.line:null;
   drawKmMarkers();
+  redrawZones();renderZoneList();
   renderPoiList();
   updateStats();
   updateTarget();
@@ -966,6 +988,7 @@ async function rebuildRoute(){
         redrawAllTrackLines();
         routeLine=activeTrack?activeTrack.line:null;
         drawKmMarkers();
+        redrawZones();renderZoneList();
         updateStats();
         updateTarget();
       } else {
@@ -997,6 +1020,67 @@ async function insertStopOnLine(latlng){
   toast("Dodano przystanek pomiędzy — kolejne przenumerowane.");
 }
 function drawKmMarkers(){if(kmLayer){map.removeLayer(kmLayer);kmLayer=null;}if(!showKm||lastGeometry.length<2)return;kmLayer=L.layerGroup().addTo(map);for(let km=1;km*1000<totalMeters;km++)L.marker(pointAtMeters(km*1000),{icon:L.divIcon({className:"kmlabel",html:`${km} km`,iconSize:null}),interactive:false}).addTo(kmLayer);}
+// ---------- strefy na trasie (podkolorowany odcinek między dwoma km) ----------
+function subGeometryBetween(startM,endM){
+  if(lastGeometry.length<2)return[];
+  const start=Math.max(0,Math.min(startM,endM)),end=Math.max(startM,endM);
+  const result=[];let acc=0;
+  for(let i=1;i<lastGeometry.length;i++){
+    const A={lat:lastGeometry[i-1][0],lng:lastGeometry[i-1][1]},B={lat:lastGeometry[i][0],lng:lastGeometry[i][1]};
+    const seg=haversine(A,B);const segStart=acc,segEnd=acc+seg;
+    if(segEnd>=start&&segStart<=end){
+      const t0=Math.max(0,(start-segStart)/(seg||1)),t1=Math.min(1,(end-segStart)/(seg||1));
+      const p0=[A.lat+(B.lat-A.lat)*t0,A.lng+(B.lng-A.lng)*t0],p1=[A.lat+(B.lat-A.lat)*t1,A.lng+(B.lng-A.lng)*t1];
+      if(!result.length)result.push(p0);
+      result.push(p1);
+    }
+    acc=segEnd;
+    if(acc>end)break;
+  }
+  return result;
+}
+let zoneLayers=[];
+function redrawZones(){
+  zoneLayers.forEach(l=>map.removeLayer(l));zoneLayers=[];
+  if(!activeTrack||!activeTrack.zones)return;
+  activeTrack.zones.forEach(z=>{
+    const geom=subGeometryBetween(z.startKm*1000,z.endKm*1000);
+    if(geom.length<2)return;
+    const line=L.polyline(geom,{color:z.color,weight:11,opacity:.55,lineCap:"round",interactive:false}).addTo(map);
+    line.bindTooltip(z.name||"Strefa",{permanent:true,direction:"center"});
+    line.bringToFront();
+    zoneLayers.push(line);
+  });
+}
+function renderZoneList(){
+  const wrap=$("zoneList");if(!wrap)return;
+  const zones=(activeTrack&&activeTrack.zones)||[];
+  if(!zones.length){wrap.innerHTML='<div class="empty">Brak stref. Dodaj pierwszą powyżej.</div>';return;}
+  wrap.innerHTML="";
+  zones.forEach(z=>{
+    const row=document.createElement("div");
+    row.style.cssText="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--panel-2);border:1px solid var(--line);border-radius:8px";
+    row.innerHTML=`<input type="color" value="${z.color}" style="width:30px;height:30px;border:1px solid var(--line);border-radius:6px;padding:1px;cursor:pointer;flex:none;background:var(--panel-2)"><input type="text" class="fld zname" value="${(z.name||"").replace(/"/g,"&quot;")}" style="flex:1;font-size:12.5px;padding:7px 9px"><span style="font-size:11px;color:var(--ink-dim);white-space:nowrap">${z.startKm.toFixed(2).replace(".",",")}–${z.endKm.toFixed(2).replace(".",",")} km</span><button class="del" title="Usuń">✕</button>`;
+    const colorInp=row.querySelector('input[type="color"]');colorInp.oninput=()=>{z.color=colorInp.value;redrawZones();};
+    const nameInp=row.querySelector(".zname");nameInp.oninput=()=>{z.name=nameInp.value;redrawZones();};
+    row.querySelector(".del").onclick=()=>{activeTrack.zones=activeTrack.zones.filter(x=>x.id!==z.id);redrawZones();renderZoneList();toast("Usunięto strefę.");};
+    wrap.appendChild(row);
+  });
+}
+$("zoneAddBtn").onclick=()=>{
+  const from=parseFloat($("zoneFrom").value),to=parseFloat($("zoneTo").value);
+  const name=($("zoneName").value||"").trim()||"Strefa";
+  const color=$("zoneColor").value||"#3da5f4";
+  if(!isFinite(from)||!isFinite(to)||from===to){toast("Podaj poprawny zakres kilometrów (od ≠ do).");return;}
+  if(lastGeometry.length<2){toast("Najpierw wyznacz trasę.");return;}
+  const totalKm=totalMeters/1000;
+  if(from<0||to<0||from>totalKm+0.01||to>totalKm+0.01){toast("Zakres przekracza długość trasy (0–"+totalKm.toFixed(2).replace(".",",")+" km).");return;}
+  if(!activeTrack.zones)activeTrack.zones=[];
+  activeTrack.zones.push({id:idSeq++,name,color,startKm:Math.min(from,to),endKm:Math.max(from,to)});
+  $("zoneName").value="";
+  redrawZones();renderZoneList();
+  toast("Dodano strefę „"+name+"”.");
+};
 function updateStats(){syncActive();const sum=tracks.reduce((a,t)=>a+(t.meters||0),0);$("distVal").textContent=(sum/1000).toFixed(2).replace(".",",");const db=$("distBadge");if(db)db.textContent=(tracks.length>1?"📏 Suma: ":"📏 Trasa: ")+(sum/1000).toFixed(2).replace(".",",")+" km"+(tracks.length>1&&activeTrack?" (tu: "+(totalMeters/1000).toFixed(2).replace(".",",")+")":"");$("cpVal").textContent=pois.filter(p=>p.type==="checkpoint").length;$("poiCount").textContent=pois.length;$("listCount").textContent=pois.length;$("clearPoiBtn").disabled=pois.length===0;$("gpxBtn").disabled=lastGeometry.length<2&&pois.length===0;const _pngBtn=$("pngBtn");if(_pngBtn)_pngBtn.disabled=!tracks.some(t=>t.geometry&&t.geometry.length>=2);const _playBtn=$("playRouteBtn");if(_playBtn)_playBtn.disabled=!tracks.some(t=>t.geometry&&t.geometry.length>=2);const _vidBtn=$("videoDownloadBtn");if(_vidBtn)_vidBtn.disabled=!tracks.some(t=>t.geometry&&t.geometry.length>=2);try{updateTime();}catch(e){}}
 
 // ---------- podświetlanie zaznaczonego punktu (lista <-> mapa) ----------
@@ -1182,7 +1266,7 @@ sInput.addEventListener("focus",searchInfoText);
 sInput.addEventListener("input",()=>{clearTimeout(sTimer);const q=sInput.value.trim();if(q.length<3){sDrop.classList.remove("show");return;}sTimer=setTimeout(async()=>{searchInfoText();sSpin.textContent="…";try{const list=await geocode(q);sDrop.innerHTML="";if(!list.length)sDrop.innerHTML='<div class="res">Nic nie znaleziono. Dopisz miasto.</div>';else list.forEach(it=>{const el=document.createElement("div");el.className="res";el.innerHTML=`<span class="pin">📍</span><span class="t">${it.main.replace(/</g,"&lt;")}<small>${it.rest.replace(/</g,"&lt;")}</small></span>`;el.onclick=()=>{const ll=L.latLng(it.lat,it.lon);map.setView(ll,15);if(mode==="route")placeRouteStop(ll,it.main);else addPoi(poiType,ll);sDrop.classList.remove("show");sInput.value="";toast("Dodano: "+it.main);};sDrop.appendChild(el);});sDrop.classList.add("show");}catch(e){sDrop.innerHTML='<div class="res">Brak połączenia.</div>';sDrop.classList.add("show");}sSpin.textContent="";},550);});
 document.addEventListener("click",e=>{if(!$("searchWrap").contains(e.target))sDrop.classList.remove("show");});
 
-function serialize(){syncActive();return{v:4,name:$("projName").value,snap,activeTrack:activeTrack?activeTrack.id:null,tracks:tracks.map(t=>({id:t.id,name:t.name,color:t.color,stops:t.stops.filter(s=>s.latlng).map(s=>({lat:s.latlng.lat,lng:s.latlng.lng,address:s.address}))})),pois:pois.map(p=>({type:p.type,lat:p.latlng.lat,lng:p.latlng.lng,name:p.name,note:p.note,volNum:p.volNum||"",volName:p.volName||""}))};}
+function serialize(){syncActive();return{v:4,name:$("projName").value,snap,activeTrack:activeTrack?activeTrack.id:null,tracks:tracks.map(t=>({id:t.id,name:t.name,color:t.color,stops:t.stops.filter(s=>s.latlng).map(s=>({lat:s.latlng.lat,lng:s.latlng.lng,address:s.address})),zones:(t.zones||[]).map(z=>({name:z.name,color:z.color,startKm:z.startKm,endKm:z.endKm}))})),pois:pois.map(p=>({type:p.type,lat:p.latlng.lat,lng:p.latlng.lng,name:p.name,note:p.note,volNum:p.volNum||"",volName:p.volName||""}))};}
 $("saveBtn").onclick=()=>{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(serialize(),null,2)],{type:"application/json"}));a.download=($("projName").value||"projekt").replace(/[^\w-]+/g,"_")+".json";a.click();URL.revokeObjectURL(a.href);toast("Zapisano projekt ✓");};
 $("loadBtn").onclick=()=>$("fileInput").click();
 $("fileInput").onchange=async e=>{
@@ -1241,7 +1325,7 @@ async function loadProject(d,keepView){
   $("projName").value=d.name||"Wczytany projekt";
   if(typeof d.snap==="boolean"){snap=d.snap;$("snapToggle").classList.toggle("on",snap);}
   const trackDefs=(d.tracks&&d.tracks.length)?d.tracks:[{name:"Trasa 1",color:TRACK_COLORS[0],stops:(d.stops||d.waypoints||[])}];
-  trackDefs.forEach(td=>{const t=newTrack(td.name,td.color);if(td.id!=null){t.id=td.id;if(td.id>=idSeq)idSeq=td.id+1;}(td.stops||[]).forEach(w=>{const lat=parseFloat(w.lat), lng=parseFloat(w.lng);if(!isFinite(lat)||!isFinite(lng))return;const s={id:idSeq++,latlng:L.latLng(lat,lng),address:w.address||"",marker:null};t.stops.push(s);});});
+  trackDefs.forEach(td=>{const t=newTrack(td.name,td.color);if(td.id!=null){t.id=td.id;if(td.id>=idSeq)idSeq=td.id+1;}(td.stops||[]).forEach(w=>{const lat=parseFloat(w.lat), lng=parseFloat(w.lng);if(!isFinite(lat)||!isFinite(lng))return;const s={id:idSeq++,latlng:L.latLng(lat,lng),address:w.address||"",marker:null};t.stops.push(s);});t.zones=(td.zones||[]).filter(z=>z&&isFinite(z.startKm)&&isFinite(z.endKm)).map(z=>({id:idSeq++,name:z.name||"Strefa",color:z.color||"#3da5f4",startKm:z.startKm,endKm:z.endKm}));});
   (d.pois||[]).forEach(p=>{const lat=parseFloat(p.lat), lng=parseFloat(p.lng);if(!isFinite(lat)||!isFinite(lng)||!p.type||!POI[p.type])return;const o=addPoi(p.type,L.latLng(lat,lng),p.name,true);if(o){o.note=p.note||"";o.volNum=p.volNum||"";o.volName=p.volName||"";}});
   if((d.pois||[]).length){renderPoiList();updateStats();}
   // Szybka linia prosta dla WSZYSTKICH tras — bez żadnego zapytania sieciowego, natychmiastowy podgląd.
@@ -1343,7 +1427,7 @@ $("proposeBtn").onclick=proposeRoute;
 function makeShareLink(){
   try{
     const enc=LZString.compressToEncodedURIComponent(JSON.stringify(serialize()));
-    const url=location.origin+location.pathname+"#p="+enc;
+    const url=location.origin+location.pathname+"#p="+encodeURIComponent(enc);
     $("shareLink").value=url;$("shareWrap").style.display="block";
     if(navigator.clipboard)navigator.clipboard.writeText(url).then(()=>toast("Link skopiowany — wyślij wspólnikowi.")).catch(()=>toast("Link gotowy — skopiuj poniżej."));
     else toast("Link gotowy — skopiuj poniżej.");
@@ -1353,7 +1437,7 @@ function makeShareLink(){
 function loadFromHash(){
   const h=location.hash||"";
   if(h.indexOf("#p=")===0){
-    try{const data=JSON.parse(LZString.decompressFromEncodedURIComponent(h.slice(3)));if(data){loadProject(data);toast("Wczytano projekt z linku.");return;}}catch(e){toast("Nie udało się odczytać projektu z linku.");}
+    try{const data=JSON.parse(LZString.decompressFromEncodedURIComponent(safeDecodeHash(h.slice(3))));if(data){loadProject(data);toast("Wczytano projekt z linku.");return;}}catch(e){toast("Nie udało się odczytać projektu z linku.");}
   }
   // brak linku z projektem, brak pokoju, brak trybu prezentacji ani embed -> spróbuj wczytać autozapis z tego urządzenia
   if(h.indexOf("#room=")!==0 && h.indexOf("#view=")!==0 && h.indexOf("#embed=")!==0 && h.indexOf("#vol=")!==0){
@@ -2320,7 +2404,7 @@ setTimeout(()=>{
 mergeCustomIntoPOI();
 setTimeout(()=>{ renderCustomPoiList(); buildChips(); }, 150);
 renderTrackList();
-renderStops();updateStats();searchInfoText();updateVolAssignedCount();
+renderStops();updateStats();searchInfoText();updateVolAssignedCount();renderZoneList();
 $("fitBtn").onclick=fitToRoute;
 $("addTrackBtn").onclick=async()=>{
   const hasContent=tracks.some(t=>t.stops && t.stops.some(s=>s.latlng)) || pois.length;
@@ -2635,7 +2719,7 @@ $("embedFitBtn") && ($("embedFitBtn").onclick=()=>{ try{ const {path}=animBuildF
 $("viewerShareBtn").onclick=()=>{
   try{
     const enc=LZString.compressToEncodedURIComponent(JSON.stringify(serialize()));
-    const url=location.origin+location.pathname+"#view="+enc;
+    const url=location.origin+location.pathname+"#view="+encodeURIComponent(enc);
     $("viewerShareLink").value=url; $("viewerShareWrap").style.display="block";
     if(navigator.clipboard) navigator.clipboard.writeText(url).then(()=>toast("Link prezentacji skopiowany ✓")).catch(()=>toast("Link gotowy — skopiuj poniżej."));
     else toast("Link gotowy — skopiuj poniżej.");
@@ -2651,7 +2735,7 @@ $("viewerCopyBtn").onclick=async()=>{
 // Kod embed (do wklejenia na stronę www jako iframe)
 function buildEmbedUrl(){
   const enc=LZString.compressToEncodedURIComponent(JSON.stringify(serialize()));
-  return location.origin+location.pathname+"#embed="+enc;
+  return location.origin+location.pathname+"#embed="+encodeURIComponent(enc);
 }
 $("embedShareBtn").onclick=()=>{
   try{
@@ -2873,7 +2957,7 @@ async function activateViewerModeIfNeeded(){
   if(!isView && !isEmbed) return;
   try{
     const prefix=isView?6:7;
-    const data=JSON.parse(LZString.decompressFromEncodedURIComponent(h.slice(prefix)));
+    const data=JSON.parse(LZString.decompressFromEncodedURIComponent(safeDecodeHash(h.slice(prefix))));
     if(!data) return;
     await loadProject(data,false);
     if(isView){
@@ -3172,7 +3256,7 @@ $("volShareBtn").onclick=()=>{
   if(!list.length){toast("Najpierw przy punktach na liście wpisz numer i imię wolontariusza.");return;}
   try{
     const enc=LZString.compressToEncodedURIComponent(JSON.stringify({list}));
-    const url=location.origin+location.pathname+"#vol="+enc;
+    const url=location.origin+location.pathname+"#vol="+encodeURIComponent(enc);
     $("volShareLink").value=url;$("volShareWrap").style.display="block";
     if(navigator.clipboard)navigator.clipboard.writeText(url).then(()=>toast("Link skopiowany — wyślij wszystkim wolontariuszom ✓")).catch(()=>toast("Link gotowy — skopiuj poniżej."));
     else toast("Link gotowy — skopiuj poniżej.");
@@ -3194,7 +3278,7 @@ function activateVolunteerModeIfNeeded(){
   const h=location.hash||"";
   if(h.indexOf("#vol=")!==0)return false;
   let payload=null;
-  try{payload=JSON.parse(LZString.decompressFromEncodedURIComponent(h.slice(5)));}catch(e){payload=null;}
+  try{payload=JSON.parse(LZString.decompressFromEncodedURIComponent(safeDecodeHash(h.slice(5))));}catch(e){payload=null;}
   if(!payload||!Array.isArray(payload.list)||!payload.list.length){
     toast("Nieprawidłowy link wolontariusza.");
     return false;
