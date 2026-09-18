@@ -166,6 +166,10 @@
   .poiItem .head .mv{border:1px solid var(--line);background:var(--panel-2);color:var(--ink-dim);border-radius:8px;width:26px;height:26px;font-size:13px;cursor:pointer;flex:none;line-height:1;padding:0}
   .poiItem .head .mv:disabled{opacity:.3;cursor:default}
   .poiItem .head .mv:hover:not(:disabled){color:var(--accent);border-color:var(--accent)}
+  .poiItem .head .drag-handle{cursor:grab;color:var(--ink-dim);font-size:15px;flex:none;padding:0 2px;user-select:none;touch-action:none}
+  .poiItem .head .drag-handle:hover{color:var(--accent)}
+  .poiItem.dragging{opacity:.35}
+  .poiItem.drag-over{border-color:var(--accent);background:var(--accent-soft)}
   .empty{font-size:12px;color:var(--ink-dim);font-style:italic}
   /* top search HUD */
   #searchWrap{position:fixed;top:calc(14px + var(--sat));left:404px;width:344px;z-index:1100}
@@ -587,6 +591,8 @@
         <p class="hint">Zapisze pionowy film ~16 s z animacją trasy w motywie FOR RUN: czarna mapa, żółty ślad, licznik km i przewyższenia. Gotowe do wrzucenia na Reels, Stories albo TikToka. Uwaga: renderowanie zajmuje ok. 20 sekund.</p>
         <button class="btn primary" id="pngBtn" disabled style="margin-top:8px">📸 Pobierz mapę jako PNG</button>
         <p class="hint">Obraz z trasą i listą ulic pod spodem — do wysłania jako załącznik lub wydrukowania. Bez ikon punktów.</p>
+        <button class="btn primary" id="pngTransBtn" disabled style="margin-top:8px">🎯 Pobierz samą trasę (PNG, bez tła)</button>
+        <p class="hint">Tylko linia trasy (+ znaczniki start/meta) na przezroczystym tle — bez mapy, bez nagłówka. Do nakładania na własną grafikę, plakat, baner itp.</p>
         <button class="btn primary" id="gpxBtn" disabled style="margin-top:8px">⬇ Pobierz plik GPX</button>
         <p class="hint">GPX wczytasz do zegarka, aplikacji dla zawodników lub przekażesz służbom.</p>
       </div>
@@ -1095,9 +1101,9 @@ $("areaDrawBtn").onclick=()=>{
   if(typeof L==="undefined"||!L.Draw){toast("Narzędzie rysowania nie wczytało się — sprawdź internet i odśwież stronę.");return;}
   if(areaDrawing)return;
   areaDrawing=true;
-  areaDrawer=new L.Draw.Rectangle(map,{shapeOptions:{color:"#3da5f4",weight:3,fillOpacity:.18}});
+  areaDrawer=new L.Draw.Polygon(map,{shapeOptions:{color:"#3da5f4",weight:3,fillOpacity:.18},showArea:false});
   areaDrawer.enable();
-  toast("🖐 Naciśnij i przeciągnij na mapie, żeby narysować obszar. ESC = anuluj.");
+  toast("🖐 Klikaj punkty na mapie, żeby zbudować obszar. Kliknij pierwszy punkt (albo dwukrotnie), żeby go zamknąć. ESC = anuluj.");
 };
 map.on(L.Draw.Event.CREATED,e=>{
   areaDrawing=false;
@@ -1141,7 +1147,7 @@ function renderAreaList(){
     wrap.appendChild(row);
   });
 }
-function updateStats(){syncActive();const sum=tracks.reduce((a,t)=>a+(t.meters||0),0);$("distVal").textContent=(sum/1000).toFixed(2).replace(".",",");const db=$("distBadge");if(db)db.textContent=(tracks.length>1?"📏 Suma: ":"📏 Trasa: ")+(sum/1000).toFixed(2).replace(".",",")+" km"+(tracks.length>1&&activeTrack?" (tu: "+(totalMeters/1000).toFixed(2).replace(".",",")+")":"");$("cpVal").textContent=pois.filter(p=>p.type==="checkpoint").length;$("poiCount").textContent=pois.length;$("listCount").textContent=pois.length;$("clearPoiBtn").disabled=pois.length===0;$("gpxBtn").disabled=lastGeometry.length<2&&pois.length===0;const _pngBtn=$("pngBtn");if(_pngBtn)_pngBtn.disabled=!tracks.some(t=>t.geometry&&t.geometry.length>=2);const _playBtn=$("playRouteBtn");if(_playBtn)_playBtn.disabled=!tracks.some(t=>t.geometry&&t.geometry.length>=2);const _vidBtn=$("videoDownloadBtn");if(_vidBtn)_vidBtn.disabled=!tracks.some(t=>t.geometry&&t.geometry.length>=2);try{updateTime();}catch(e){}}
+function updateStats(){syncActive();const sum=tracks.reduce((a,t)=>a+(t.meters||0),0);$("distVal").textContent=(sum/1000).toFixed(2).replace(".",",");const db=$("distBadge");if(db)db.textContent=(tracks.length>1?"📏 Suma: ":"📏 Trasa: ")+(sum/1000).toFixed(2).replace(".",",")+" km"+(tracks.length>1&&activeTrack?" (tu: "+(totalMeters/1000).toFixed(2).replace(".",",")+")":"");$("cpVal").textContent=pois.filter(p=>p.type==="checkpoint").length;$("poiCount").textContent=pois.length;$("listCount").textContent=pois.length;$("clearPoiBtn").disabled=pois.length===0;$("gpxBtn").disabled=lastGeometry.length<2&&pois.length===0;const _pngBtn=$("pngBtn");if(_pngBtn)_pngBtn.disabled=!tracks.some(t=>t.geometry&&t.geometry.length>=2);const _pngTransBtn=$("pngTransBtn");if(_pngTransBtn)_pngTransBtn.disabled=!tracks.some(t=>t.geometry&&t.geometry.length>=2);const _playBtn=$("playRouteBtn");if(_playBtn)_playBtn.disabled=!tracks.some(t=>t.geometry&&t.geometry.length>=2);const _vidBtn=$("videoDownloadBtn");if(_vidBtn)_vidBtn.disabled=!tracks.some(t=>t.geometry&&t.geometry.length>=2);try{updateTime();}catch(e){}}
 
 // ---------- podświetlanie zaznaczonego punktu (lista <-> mapa) ----------
 function highlightPoi(p){
@@ -1286,9 +1292,36 @@ map.on("movestart zoomstart",()=>{clearTimeout(spreadHoverT);if(activeSpreadGrou
 map.on("zoomend moveend",()=>computeClusters());
 
 function addPoi(type,latlng,name,silent){const id=idSeq++;const obj={id,type,latlng,name:name||"",note:""};obj.marker=L.marker(latlng,{icon:poiIcon(type),draggable:true}).addTo(map);tagPoiIcon(obj);attachSpreadHover(obj);obj.marker.on("dragend",()=>{obj.latlng=obj.marker.getLatLng();renderPoiList();});obj.marker.on("click",()=>{openEditor(id);highlightPoi(obj);});pois.push(obj);if(!silent){renderPoiList();updateStats();}return obj;}
-function movePoi(id,dir){const idx=pois.findIndex(p=>p.id===id);if(idx<0)return;const j=idx+dir;if(j<0||j>=pois.length)return;const tmp=pois[idx];pois[idx]=pois[j];pois[j]=tmp;renderPoiList();}
+function movePoi(id,dir){
+  const p=pois.find(x=>x.id===id);if(!p)return;
+  const sameType=pois.filter(x=>x.type===p.type);
+  const li=sameType.indexOf(p);const tj=li+dir;
+  if(tj<0||tj>=sameType.length)return;
+  const neighbor=sameType[tj];
+  const gi=pois.indexOf(p),gj=pois.indexOf(neighbor);
+  pois[gi]=neighbor;pois[gj]=p;
+  renderPoiList();
+}
+function reorderPoiDrop(draggedId,targetId){
+  const dragged=pois.find(x=>x.id===draggedId),target=pois.find(x=>x.id===targetId);
+  if(!dragged||!target||dragged.type!==target.type||dragged===target)return;
+  const from=pois.indexOf(dragged);
+  pois.splice(from,1);
+  const to=pois.indexOf(target);
+  pois.splice(to,0,dragged);
+  renderPoiList();
+}
 function sortPoisByKm(){pois.sort((a,b)=>(kmAlong(a.latlng)??1e9)-(kmAlong(b.latlng)??1e9));renderPoiList();toast("Punkty posortowane według kilometra trasy.");}
-function renderPoiList(){const el=$("poiList");buildPoiFilterChips();if(pois.length===0){el.innerHTML='<div class="empty">Brak punktów. Wybierz typ powyżej i kliknij na mapie, albo rozmieść automatycznie.</div>';applyPoiVisibility();return;}const cps=pois.filter(p=>p.type==="checkpoint").map(p=>({p,km:kmAlong(p.latlng)??1e9})).sort((a,b)=>a.km-b.km);cps.forEach((x,i)=>x.p._cpNo=i+1);pois.forEach(p=>{p.marker.setIcon(poiIcon(p.type,p.type==="checkpoint"?p._cpNo:null));tagPoiIcon(p);});el.innerHTML="";const visible=pois.filter(poiIsVisible);if(!visible.length){el.innerHTML='<div class="empty">Wszystkie punkty są odfiltrowane — włącz je w filtrze powyżej.</div>';applyPoiVisibility();return;}visible.forEach(p=>{const km=kmAlong(p.latlng);const def=POI[p.type].label+(p.type==="checkpoint"?" "+p._cpNo:"");const display=p.name||def;const kmTxt=km!=null?km.toFixed(2).replace(".",",")+" km":"—";const idx=pois.indexOf(p);const item=document.createElement("div");item.className="poiItem";item.dataset.id=p.id;item.innerHTML=`<div class="head"><button class="mv poi-up" title="Wyżej na liście">↑</button><button class="mv poi-dn" title="Niżej na liście">↓</button><span class="ic" style="color:${POI[p.type].color}">${POI[p.type].ic}</span><span class="nm">${display.replace(/</g,"&lt;")}</span><span class="km">${kmTxt}</span><button class="del" title="Usuń">✕</button></div><div class="edit"><input type="text" class="fld" placeholder="Nazwa (np. ${def})" value="${(p.name||"").replace(/"/g,"&quot;")}"><textarea class="fld" placeholder="Notatka — obsada, sprzęt, godziny otwarcia">${(p.note||"").replace(/</g,"&lt;")}</textarea><div style="border-top:1px dashed var(--line);margin-top:2px;padding-top:8px"><div style="font-size:10.5px;font-weight:600;color:var(--ink-dim);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">🙋 Przypisany wolontariusz (opcjonalnie)</div><div class="row" style="gap:6px"><input type="text" class="fld vol-num" placeholder="Numer" value="${(p.volNum||"").replace(/"/g,"&quot;")}" style="flex:none;width:78px"><input type="text" class="fld vol-name" placeholder="Imię i nazwisko" value="${(p.volName||"").replace(/"/g,"&quot;")}" style="flex:1"></div><div class="vol-confirm" style="font-size:11px;margin-top:7px;font-weight:600"></div></div></div>`;const upBtn=item.querySelector(".poi-up"),dnBtn=item.querySelector(".poi-dn");upBtn.disabled=(idx<=0);dnBtn.disabled=(idx>=pois.length-1);upBtn.onclick=ev=>{ev.stopPropagation();movePoi(p.id,-1);};dnBtn.onclick=ev=>{ev.stopPropagation();movePoi(p.id,1);};item.querySelector(".head").onclick=ev=>{if(ev.target.classList.contains("poi-up")||ev.target.classList.contains("poi-dn"))return;if(ev.target.classList.contains("del")){map.removeLayer(p.marker);pois=pois.filter(x=>x.id!==p.id);renderPoiList();updateStats();return;}item.classList.toggle("open");if(item.classList.contains("open")){map.panTo(p.latlng);highlightPoi(p);}};const ni=item.querySelector("input"),ta=item.querySelector("textarea");ni.oninput=()=>{p.name=ni.value;item.querySelector(".nm").textContent=p.name||def;};ta.oninput=()=>{p.note=ta.value;};const volNumInp=item.querySelector(".vol-num"),volNameInp=item.querySelector(".vol-name"),volConfirm=item.querySelector(".vol-confirm");const refreshVolConfirm=()=>{const okNum=(p.volNum||"").trim(),okName=(p.volName||"").trim();if(okNum&&okName){volConfirm.style.color="var(--good)";volConfirm.textContent="✓ Zapisano — nr "+okNum+", "+okName;}else if(okNum||okName){volConfirm.style.color="var(--accent-2)";volConfirm.textContent="⚠ Uzupełnij oba pola (numer i imię), żeby przypisanie się liczyło.";}else{volConfirm.textContent="";}};refreshVolConfirm();if(volNumInp)volNumInp.oninput=()=>{p.volNum=volNumInp.value;refreshVolConfirm();updateVolAssignedCount();};if(volNameInp)volNameInp.oninput=()=>{p.volName=volNameInp.value;refreshVolConfirm();updateVolAssignedCount();};el.appendChild(item);});applyPoiVisibility();}
+let dragPoiId=null;
+function renderPoiList(){const el=$("poiList");buildPoiFilterChips();if(pois.length===0){el.innerHTML='<div class="empty">Brak punktów. Wybierz typ powyżej i kliknij na mapie, albo rozmieść automatycznie.</div>';applyPoiVisibility();return;}const cps=pois.filter(p=>p.type==="checkpoint").map(p=>({p,km:kmAlong(p.latlng)??1e9})).sort((a,b)=>a.km-b.km);cps.forEach((x,i)=>x.p._cpNo=i+1);pois.forEach(p=>{p.marker.setIcon(poiIcon(p.type,p.type==="checkpoint"?p._cpNo:null));tagPoiIcon(p);});el.innerHTML="";let anyVisible=false;Object.keys(POI).forEach(type=>{const groupAll=pois.filter(p=>p.type===type);if(!groupAll.length)return;const group=groupAll.filter(poiIsVisible);if(!group.length)return;anyVisible=true;const head=document.createElement("div");head.className="poiGroupHead";head.style.borderLeft="4px solid "+POI[type].color;head.style.paddingLeft="8px";head.innerHTML=`<span class="ic">${POI[type].ic}</span><span class="gl">${POI[type].label}</span><span class="count" style="background:${POI[type].color}">${group.length}</span>`;el.appendChild(head);group.forEach((p,li)=>{const km=kmAlong(p.latlng);const def=POI[p.type].label+(p.type==="checkpoint"?" "+p._cpNo:"");const display=p.name||def;const kmTxt=km!=null?km.toFixed(2).replace(".",",")+" km":"—";const item=document.createElement("div");item.className="poiItem";item.dataset.id=p.id;item.innerHTML=`<div class="head"><span class="drag-handle" title="Przeciągnij, by przestawić w tej kategorii">☰</span><button class="mv poi-up" title="Wyżej w tej kategorii">↑</button><button class="mv poi-dn" title="Niżej w tej kategorii">↓</button><span class="ic">${POI[p.type].ic}</span><span class="nm">${display.replace(/</g,"&lt;")}</span><span class="km">${kmTxt}</span><button class="del" title="Usuń">✕</button></div><div class="edit"><input type="text" class="fld" placeholder="Nazwa (np. ${def})" value="${(p.name||"").replace(/"/g,"&quot;")}"><textarea class="fld" placeholder="Notatka — obsada, sprzęt, godziny otwarcia">${(p.note||"").replace(/</g,"&lt;")}</textarea><div style="border-top:1px dashed var(--line);margin-top:2px;padding-top:8px"><div style="font-size:10.5px;font-weight:600;color:var(--ink-dim);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">🙋 Przypisany wolontariusz (opcjonalnie)</div><div class="row" style="gap:6px"><input type="text" class="fld vol-num" placeholder="Numer" value="${(p.volNum||"").replace(/"/g,"&quot;")}" style="flex:none;width:78px"><input type="text" class="fld vol-name" placeholder="Imię i nazwisko" value="${(p.volName||"").replace(/"/g,"&quot;")}" style="flex:1"></div><div class="vol-confirm" style="font-size:11px;margin-top:7px;font-weight:600"></div></div></div>`;const upBtn=item.querySelector(".poi-up"),dnBtn=item.querySelector(".poi-dn");upBtn.disabled=(li<=0);dnBtn.disabled=(li>=group.length-1);upBtn.onclick=ev=>{ev.stopPropagation();movePoi(p.id,-1);};dnBtn.onclick=ev=>{ev.stopPropagation();movePoi(p.id,1);};
+    // przeciąganie (☰) — tylko na komputerze; w obrębie tej samej kategorii
+    item.draggable=true;
+    item.addEventListener("dragstart",ev=>{if(!ev.target.closest(".drag-handle")){ev.preventDefault();return;}dragPoiId=p.id;item.classList.add("dragging");try{ev.dataTransfer.setData("text/plain",String(p.id));}catch(e){}ev.dataTransfer.effectAllowed="move";});
+    item.addEventListener("dragend",()=>{item.classList.remove("dragging");document.querySelectorAll(".poiItem.drag-over").forEach(x=>x.classList.remove("drag-over"));dragPoiId=null;});
+    item.addEventListener("dragover",ev=>{if(dragPoiId==null)return;const dragged=pois.find(x=>x.id===dragPoiId);if(!dragged||dragged.type!==p.type)return;ev.preventDefault();item.classList.add("drag-over");});
+    item.addEventListener("dragleave",()=>{item.classList.remove("drag-over");});
+    item.addEventListener("drop",ev=>{ev.preventDefault();item.classList.remove("drag-over");if(dragPoiId==null)return;reorderPoiDrop(dragPoiId,p.id);dragPoiId=null;});
+    item.querySelector(".head").onclick=ev=>{if(ev.target.classList.contains("poi-up")||ev.target.classList.contains("poi-dn")||ev.target.classList.contains("drag-handle"))return;if(ev.target.classList.contains("del")){map.removeLayer(p.marker);pois=pois.filter(x=>x.id!==p.id);renderPoiList();updateStats();return;}item.classList.toggle("open");if(item.classList.contains("open")){map.panTo(p.latlng);highlightPoi(p);}};const ni=item.querySelector("input"),ta=item.querySelector("textarea");ni.oninput=()=>{p.name=ni.value;item.querySelector(".nm").textContent=p.name||def;};ta.oninput=()=>{p.note=ta.value;};const volNumInp=item.querySelector(".vol-num"),volNameInp=item.querySelector(".vol-name"),volConfirm=item.querySelector(".vol-confirm");const refreshVolConfirm=()=>{const okNum=(p.volNum||"").trim(),okName=(p.volName||"").trim();if(okNum&&okName){volConfirm.style.color="var(--good)";volConfirm.textContent="✓ Zapisano — nr "+okNum+", "+okName;}else if(okNum||okName){volConfirm.style.color="var(--accent-2)";volConfirm.textContent="⚠ Uzupełnij oba pola (numer i imię), żeby przypisanie się liczyło.";}else{volConfirm.textContent="";}};refreshVolConfirm();if(volNumInp)volNumInp.oninput=()=>{p.volNum=volNumInp.value;refreshVolConfirm();updateVolAssignedCount();};if(volNameInp)volNameInp.oninput=()=>{p.volName=volNameInp.value;refreshVolConfirm();updateVolAssignedCount();};el.appendChild(item);});});if(!anyVisible)el.innerHTML='<div class="empty">Wszystkie punkty są odfiltrowane — włącz je w filtrze powyżej.</div>';applyPoiVisibility();}
 function openEditor(id){const item=document.querySelector(`.poiItem[data-id="${id}"]`);if(item){$("panel").classList.remove("collapsed");item.classList.add("open");item.scrollIntoView({behavior:"smooth",block:"center"});}}
 
 function openTypeChooser(latlng){
@@ -2246,6 +2279,74 @@ async function exportPNG(){
   }
 }
 $("pngBtn").onclick=exportPNG;
+
+// ===== EKSPORT PNG BEZ TŁA — sama trasa, przezroczyste tło =====
+async function exportPNGTransparent(){
+  const anyGeom=tracks.some(t=>t.geometry&&t.geometry.length>=2);
+  if(!anyGeom){toast("Najpierw narysuj trasę.");return;}
+  const btn=$("pngTransBtn");const oldTxt=btn?btn.textContent:"";
+  if(btn){btn.disabled=true;btn.textContent="⏳ Generuję…";}
+  try{
+    let minLat=Infinity,maxLat=-Infinity,minLng=Infinity,maxLng=-Infinity;
+    tracks.forEach(t=>{if(t.geometry)t.geometry.forEach(([lat,lng])=>{if(lat<minLat)minLat=lat;if(lat>maxLat)maxLat=lat;if(lng<minLng)minLng=lng;if(lng>maxLng)maxLng=lng;});});
+    if(!isFinite(minLat)){toast("Brak trasy do wyeksportowania.");return;}
+    const PAD=60,W=1600,refZoom=15;
+    const nw=pngLngLatToPixel(minLng,maxLat,refZoom),se=pngLngLatToPixel(maxLng,minLat,refZoom);
+    const bw=Math.max(1,se.x-nw.x),bh=Math.max(1,se.y-nw.y);
+    const H=Math.max(300,Math.round((W-PAD*2)*(bh/bw))+PAD*2);
+    const canvas=document.createElement("canvas");
+    canvas.width=W;canvas.height=H;
+    const ctx=canvas.getContext("2d");
+    ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality="high";
+    // brak wypełnienia tła — canvas jest domyślnie przezroczysty
+    const scaleX=(W-PAD*2)/bw,scaleY=(H-PAD*2)/bh;
+    const toXY=(lat,lng)=>{const p=pngLngLatToPixel(lng,lat,refZoom);return{x:PAD+(p.x-nw.x)*scaleX,y:PAD+(p.y-nw.y)*scaleY};};
+    tracks.forEach(t=>{
+      if(!t.geometry||t.geometry.length<2)return;
+      ctx.save();ctx.strokeStyle="rgba(255,255,255,.95)";ctx.lineWidth=16;ctx.lineJoin="round";ctx.lineCap="round";
+      ctx.beginPath();t.geometry.forEach((ll,i)=>{const p=toXY(ll[0],ll[1]);if(i===0)ctx.moveTo(p.x,p.y);else ctx.lineTo(p.x,p.y);});
+      ctx.stroke();ctx.restore();
+    });
+    tracks.forEach(t=>{
+      if(!t.geometry||t.geometry.length<2)return;
+      ctx.strokeStyle=t.color;ctx.lineWidth=8;ctx.lineJoin="round";ctx.lineCap="round";
+      ctx.beginPath();t.geometry.forEach((ll,i)=>{const p=toXY(ll[0],ll[1]);if(i===0)ctx.moveTo(p.x,p.y);else ctx.lineTo(p.x,p.y);});
+      ctx.stroke();
+    });
+    tracks.forEach((t,ti)=>{
+      if(!t.geometry||!t.geometry.length)return;
+      const first=t.geometry[0],last=t.geometry[t.geometry.length-1];
+      const startLabel=tracks.length>1?String(ti+1):"S",endLabel=tracks.length>1?String(ti+1):"M";
+      const ps=toXY(first[0],first[1]);
+      ctx.fillStyle="#16a34a";ctx.strokeStyle="#fff";ctx.lineWidth=4;
+      ctx.beginPath();ctx.arc(ps.x,ps.y,16,0,Math.PI*2);ctx.fill();ctx.stroke();
+      ctx.fillStyle="#fff";ctx.font="bold 14px 'Space Grotesk', system-ui, sans-serif";ctx.textAlign="center";ctx.textBaseline="middle";
+      ctx.fillText(startLabel,ps.x,ps.y+1);
+      if(t.geometry.length>1){
+        const pe=toXY(last[0],last[1]);
+        ctx.fillStyle="#dc2626";ctx.strokeStyle="#fff";ctx.lineWidth=4;
+        ctx.beginPath();ctx.arc(pe.x,pe.y,16,0,Math.PI*2);ctx.fill();ctx.stroke();
+        ctx.fillStyle="#fff";ctx.fillText(endLabel,pe.x,pe.y+1);
+      }
+    });
+    const projName=($("projName").value||"trasa").trim();
+    canvas.toBlob(blob=>{
+      if(!blob){toast("Nie udało się wygenerować PNG. Spróbuj ponownie.");return;}
+      const a=document.createElement("a");
+      a.href=URL.createObjectURL(blob);
+      a.download=(projName||"trasa").replace(/[^\w\-]+/g,"_")+"_bez_tla.png";
+      a.click();
+      setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+      toast("Pobrano trasę PNG (bez tła) ✓");
+    },"image/png");
+  }catch(err){
+    console.error(err);
+    toast("Błąd eksportu: "+(err&&err.message||err));
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent=oldTxt;}
+  }
+}
+$("pngTransBtn").onclick=exportPNGTransparent;
 
 // ---------- estimated time ----------
 let paceSec=360;
