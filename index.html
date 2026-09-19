@@ -274,6 +274,7 @@
   body.volunteer-mode #panel,body.volunteer-mode #searchWrap,body.volunteer-mode #adminBanner{display:none!important}
   body.volunteer-mode .leaflet-marker-pane,body.volunteer-mode .leaflet-tooltip-pane,body.volunteer-mode .leaflet-popup-pane{display:none!important}
   body.volunteer-mode .leaflet-overlay-pane{opacity:0!important}
+  body.volunteer-mode .leaflet-control-zoom,body.volunteer-mode .leaflet-control-layers{display:none!important}
   body.volunteer-mode .leaflet-top.leaflet-right{top:calc(90px + var(--sat))!important}
   #volCard{display:none;position:fixed;left:14px;right:14px;bottom:calc(18px + var(--sab));z-index:1500;background:var(--panel);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:1px solid var(--line-soft);border-radius:18px;padding:18px;box-shadow:var(--shadow);color:var(--ink);text-align:center;max-width:440px;margin:0 auto}
   #volCard .volBadge{display:inline-block;background:var(--accent);color:#fff;font:700 12px var(--font);padding:4px 12px;border-radius:99px;letter-spacing:.5px;margin-bottom:8px}
@@ -1105,7 +1106,7 @@ $("areaDrawBtn").onclick=()=>{
   areaDrawer.enable();
   toast("🖐 Klikaj punkty na mapie, żeby zbudować obszar. Kliknij pierwszy punkt (albo dwukrotnie), żeby go zamknąć. ESC = anuluj.");
 };
-map.on(L.Draw.Event.CREATED,e=>{
+map.on("draw:created",e=>{
   areaDrawing=false;
   const layer=e.layer.addTo(map);
   const color="#3da5f4";
@@ -1292,6 +1293,27 @@ map.on("movestart zoomstart",()=>{clearTimeout(spreadHoverT);if(activeSpreadGrou
 map.on("zoomend moveend",()=>computeClusters());
 
 function addPoi(type,latlng,name,silent){const id=idSeq++;const obj={id,type,latlng,name:name||"",note:""};obj.marker=L.marker(latlng,{icon:poiIcon(type),draggable:true}).addTo(map);tagPoiIcon(obj);attachSpreadHover(obj);obj.marker.on("dragend",()=>{obj.latlng=obj.marker.getLatLng();renderPoiList();});obj.marker.on("click",()=>{openEditor(id);highlightPoi(obj);});pois.push(obj);if(!silent){renderPoiList();updateStats();}return obj;}
+// Płynna animacja przestawiania kafelków (technika FLIP) — bez tego przestawione punkty po prostu "skakały" na nowe miejsce
+function flipAnimateRender(renderFn){
+  const before={};
+  document.querySelectorAll(".poiItem").forEach(el=>{before[el.dataset.id]=el.getBoundingClientRect();});
+  renderFn();
+  requestAnimationFrame(()=>{
+    document.querySelectorAll(".poiItem").forEach(el=>{
+      const prev=before[el.dataset.id];if(!prev)return;
+      const now=el.getBoundingClientRect();
+      const dx=prev.left-now.left,dy=prev.top-now.top;
+      if(Math.abs(dx)<1&&Math.abs(dy)<1)return;
+      el.style.transition="none";
+      el.style.transform=`translate(${dx}px,${dy}px)`;
+      requestAnimationFrame(()=>{
+        el.style.transition="transform .28s cubic-bezier(.2,.8,.3,1)";
+        el.style.transform="";
+        el.addEventListener("transitionend",()=>{el.style.transition="";},{once:true});
+      });
+    });
+  });
+}
 function movePoi(id,dir){
   const p=pois.find(x=>x.id===id);if(!p)return;
   const sameType=pois.filter(x=>x.type===p.type);
@@ -1300,7 +1322,7 @@ function movePoi(id,dir){
   const neighbor=sameType[tj];
   const gi=pois.indexOf(p),gj=pois.indexOf(neighbor);
   pois[gi]=neighbor;pois[gj]=p;
-  renderPoiList();
+  flipAnimateRender(renderPoiList);
 }
 function reorderPoiDrop(draggedId,targetId){
   const dragged=pois.find(x=>x.id===draggedId),target=pois.find(x=>x.id===targetId);
@@ -1309,9 +1331,9 @@ function reorderPoiDrop(draggedId,targetId){
   pois.splice(from,1);
   const to=pois.indexOf(target);
   pois.splice(to,0,dragged);
-  renderPoiList();
+  flipAnimateRender(renderPoiList);
 }
-function sortPoisByKm(){pois.sort((a,b)=>(kmAlong(a.latlng)??1e9)-(kmAlong(b.latlng)??1e9));renderPoiList();toast("Punkty posortowane według kilometra trasy.");}
+function sortPoisByKm(){pois.sort((a,b)=>(kmAlong(a.latlng)??1e9)-(kmAlong(b.latlng)??1e9));flipAnimateRender(renderPoiList);toast("Punkty posortowane według kilometra trasy.");}
 let dragPoiId=null;
 function renderPoiList(){const el=$("poiList");buildPoiFilterChips();if(pois.length===0){el.innerHTML='<div class="empty">Brak punktów. Wybierz typ powyżej i kliknij na mapie, albo rozmieść automatycznie.</div>';applyPoiVisibility();return;}const cps=pois.filter(p=>p.type==="checkpoint").map(p=>({p,km:kmAlong(p.latlng)??1e9})).sort((a,b)=>a.km-b.km);cps.forEach((x,i)=>x.p._cpNo=i+1);pois.forEach(p=>{p.marker.setIcon(poiIcon(p.type,p.type==="checkpoint"?p._cpNo:null));tagPoiIcon(p);});el.innerHTML="";let anyVisible=false;Object.keys(POI).forEach(type=>{const groupAll=pois.filter(p=>p.type===type);if(!groupAll.length)return;const group=groupAll.filter(poiIsVisible);if(!group.length)return;anyVisible=true;const head=document.createElement("div");head.className="poiGroupHead";head.style.borderLeft="4px solid "+POI[type].color;head.style.paddingLeft="8px";head.innerHTML=`<span class="ic">${POI[type].ic}</span><span class="gl">${POI[type].label}</span><span class="count" style="background:${POI[type].color}">${group.length}</span>`;el.appendChild(head);group.forEach((p,li)=>{const km=kmAlong(p.latlng);const def=POI[p.type].label+(p.type==="checkpoint"?" "+p._cpNo:"");const display=p.name||def;const kmTxt=km!=null?km.toFixed(2).replace(".",",")+" km":"—";const item=document.createElement("div");item.className="poiItem";item.dataset.id=p.id;item.innerHTML=`<div class="head"><span class="drag-handle" title="Przeciągnij, by przestawić w tej kategorii">☰</span><button class="mv poi-up" title="Wyżej w tej kategorii">↑</button><button class="mv poi-dn" title="Niżej w tej kategorii">↓</button><span class="ic">${POI[p.type].ic}</span><span class="nm">${display.replace(/</g,"&lt;")}</span><span class="km">${kmTxt}</span><button class="del" title="Usuń">✕</button></div><div class="edit"><input type="text" class="fld" placeholder="Nazwa (np. ${def})" value="${(p.name||"").replace(/"/g,"&quot;")}"><textarea class="fld" placeholder="Notatka — obsada, sprzęt, godziny otwarcia">${(p.note||"").replace(/</g,"&lt;")}</textarea><div style="border-top:1px dashed var(--line);margin-top:2px;padding-top:8px"><div style="font-size:10.5px;font-weight:600;color:var(--ink-dim);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">🙋 Przypisany wolontariusz (opcjonalnie)</div><div class="row" style="gap:6px"><input type="text" class="fld vol-num" placeholder="Numer" value="${(p.volNum||"").replace(/"/g,"&quot;")}" style="flex:none;width:78px"><input type="text" class="fld vol-name" placeholder="Imię i nazwisko" value="${(p.volName||"").replace(/"/g,"&quot;")}" style="flex:1"></div><div class="vol-confirm" style="font-size:11px;margin-top:7px;font-weight:600"></div></div></div>`;const upBtn=item.querySelector(".poi-up"),dnBtn=item.querySelector(".poi-dn");upBtn.disabled=(li<=0);dnBtn.disabled=(li>=group.length-1);upBtn.onclick=ev=>{ev.stopPropagation();movePoi(p.id,-1);};dnBtn.onclick=ev=>{ev.stopPropagation();movePoi(p.id,1);};
     // przeciąganie (☰) — tylko na komputerze; w obrębie tej samej kategorii
@@ -3480,6 +3502,14 @@ function showVolunteerCard(p){
   document.body.classList.add("volunteer-mode");
   map.invalidateSize();
   map.setView([p.lat,p.lng],16);
+  // Zablokuj interakcję z mapą — wolontariusz widzi tylko swój punkt, bez "chodzenia" po reszcie mapy
+  map.dragging.disable();
+  map.touchZoom.disable();
+  map.doubleClickZoom.disable();
+  map.scrollWheelZoom.disable();
+  map.boxZoom.disable();
+  map.keyboard.disable();
+  if(map.tap)map.tap.disable();
   ensureVolPane();
   const icon=(POI[p.type]&&POI[p.type].ic)||"📍";
   const color=(POI[p.type]&&POI[p.type].color)||"#ff6b1a";
