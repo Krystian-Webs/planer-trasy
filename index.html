@@ -360,9 +360,8 @@
   /* podświetlenie zaznaczonego punktu (kliknięcie na liście lub na mapie) */
   .leaflet-marker-icon.poi-highlight{filter:drop-shadow(0 0 4px #fff) drop-shadow(0 0 14px var(--accent)) brightness(1.3)!important;animation:poiHighlightPulse .85s ease-in-out 3;z-index:9997!important}
   @keyframes poiHighlightPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.3)}}
-  .poiItem.flash{animation:poiFlash 1.4s ease}
-  @keyframes poiFlash{0%{background:var(--accent-soft);border-color:var(--accent)}70%{background:var(--accent-soft);border-color:var(--accent)}100%{background:var(--panel-2);border-color:var(--line)}}
-  .stop.flash{animation:poiFlash 1.4s ease;border-radius:var(--r-sm)}
+  .poiItem.hl-frame{box-shadow:0 0 0 3px var(--accent) inset;border-color:var(--accent);transition:box-shadow .2s,border-color .2s}
+  .stop.hl-frame{box-shadow:0 0 0 3px var(--accent) inset;border-radius:var(--r-sm);transition:box-shadow .2s}
   /* płynne rozsuwanie stłoczonych pinezek pod kursorem */
   .leaflet-marker-icon.poi-spreadable{transition:transform .2s cubic-bezier(.2,.8,.3,1)}
 </style>
@@ -778,6 +777,7 @@ function safeDecodeHash(s){try{return decodeURIComponent(s);}catch(e){return s;}
 
 function waypointIcon(n){return L.divIcon({className:"",iconSize:[24,24],iconAnchor:[12,12],html:`<div style="width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,#ff8a3d,#ff6b1a);color:#fff;border:2px solid #fff;display:flex;align-items:center;justify-content:center;font:700 12px sans-serif;box-shadow:0 1px 5px #0007">${n}</div>`});}
 function poiIcon(type,badge){const p=POI[type];const b=badge?`<div style="position:absolute;top:-7px;right:-7px;background:#fff;color:${p.color};border:1.5px solid ${p.color};border-radius:9px;min-width:16px;height:16px;font:700 9px sans-serif;display:flex;align-items:center;justify-content:center;padding:0 3px;transform:rotate(45deg)">${badge}</div>`:"";return L.divIcon({className:"",iconSize:[30,30],iconAnchor:[15,30],html:`<div style="position:relative;width:30px;height:30px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:${p.color};border:2px solid #fff;box-shadow:0 2px 5px #0007;display:flex;align-items:center;justify-content:center"><span style="transform:rotate(45deg);font-size:14px">${p.ic}</span>${b}</div>`});}
+function highlightGreenIcon(sizePx){const s=sizePx||30;return L.divIcon({className:"",iconSize:[s,s],iconAnchor:[s/2,s],html:`<div style="width:${s}px;height:${s}px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:#22c55e;border:2.5px solid #fff;box-shadow:0 0 0 4px rgba(34,197,94,.35),0 2px 8px #0008"></div>`});}
 function haversine(a,b){const R=6371e3,r=x=>x*Math.PI/180;const dLat=r(b.lat-a.lat),dLng=r(b.lng-a.lng);const s=Math.sin(dLat/2)**2+Math.cos(r(a.lat))*Math.cos(r(b.lat))*Math.sin(dLng/2)**2;return 2*R*Math.asin(Math.sqrt(s));}
 function kmAlong(latlng){if(lastGeometry.length<2)return null;let best=Infinity,bestDist=0,acc=0;for(let i=1;i<lastGeometry.length;i++){const A={lat:lastGeometry[i-1][0],lng:lastGeometry[i-1][1]},B={lat:lastGeometry[i][0],lng:lastGeometry[i][1]};const seg=haversine(A,B);const dx=B.lng-A.lng,dy=B.lat-A.lat;const t=Math.max(0,Math.min(1,((latlng.lng-A.lng)*dx+(latlng.lat-A.lat)*dy)/((dx*dx+dy*dy)||1e-12)));const d=haversine(latlng,{lat:A.lat+t*dy,lng:A.lng+t*dx});if(d<best){best=d;bestDist=acc+seg*t;}acc+=seg;}return bestDist/1000;}
 function pointAtMeters(target){let acc=0;for(let i=1;i<lastGeometry.length;i++){const A={lat:lastGeometry[i-1][0],lng:lastGeometry[i-1][1]},B={lat:lastGeometry[i][0],lng:lastGeometry[i][1]};const seg=haversine(A,B);if(acc+seg>=target){const t=(target-acc)/(seg||1);return L.latLng(A.lat+(B.lat-A.lat)*t,A.lng+(B.lng-A.lng)*t);}acc+=seg;}const l=lastGeometry[lastGeometry.length-1];return L.latLng(l[0],l[1]);}
@@ -801,24 +801,19 @@ function stopLabel(i){if(stops.length<=1||i===0)return["Start","#33c27a"];if(i==
 let insertAfterStopId=null;
 function highlightStop(s){
   if(s&&s.marker){
-    const el=s.marker.getElement();
-    if(el){
-      el.classList.remove("poi-highlight");
-      void el.offsetWidth;
-      el.classList.add("poi-highlight");
-      clearTimeout(s._hlT);
-      s._hlT=setTimeout(()=>{try{el.classList.remove("poi-highlight");}catch(e){}},2600);
-    }
+    clearTimeout(s._hlT);
+    s.marker.setIcon(highlightGreenIcon(28));
+    s._hlT=setTimeout(()=>{try{renumberStops();}catch(e){}},2600);
   }
   const idx=stops.indexOf(s);
   const rows=document.querySelectorAll("#stopsList .stop");
   const row=rows[idx];
   if(row){
-    row.classList.remove("flash");
+    row.classList.remove("hl-frame");
     void row.offsetWidth;
-    row.classList.add("flash");
+    row.classList.add("hl-frame");
     row.scrollIntoView({behavior:"smooth",block:"center"});
-    setTimeout(()=>{try{row.classList.remove("flash");}catch(e){}},1500);
+    setTimeout(()=>{try{row.classList.remove("hl-frame");}catch(e){}},2600);
   }
 }
 function makeStopMarker(s){
@@ -1177,22 +1172,19 @@ function updateStats(){syncActive();const sum=tracks.reduce((a,t)=>a+(t.meters||
 // ---------- podświetlanie zaznaczonego punktu (lista <-> mapa) ----------
 function highlightPoi(p){
   if(p&&p.marker){
-    const el=p.marker.getElement();
-    if(el){
-      el.classList.remove("poi-highlight");
-      void el.offsetWidth; // restart animacji
-      el.classList.add("poi-highlight");
-      clearTimeout(p._hlT);
-      p._hlT=setTimeout(()=>{try{el.classList.remove("poi-highlight");}catch(e){}},2600);
-    }
+    clearTimeout(p._hlT);
+    p.marker.setIcon(highlightGreenIcon(34));
+    p._hlT=setTimeout(()=>{
+      try{p.marker.setIcon(poiIcon(p.type,p.type==="checkpoint"?p._cpNo:null));tagPoiIcon(p);}catch(e){}
+    },2600);
   }
   if(p){
     const item=document.querySelector(`.poiItem[data-id="${p.id}"]`);
     if(item){
-      item.classList.remove("flash");
+      item.classList.remove("hl-frame");
       void item.offsetWidth;
-      item.classList.add("flash");
-      setTimeout(()=>{try{item.classList.remove("flash");}catch(e){}},1500);
+      item.classList.add("hl-frame");
+      setTimeout(()=>{try{item.classList.remove("hl-frame");}catch(e){}},2600);
     }
   }
 }
