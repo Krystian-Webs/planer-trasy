@@ -360,8 +360,8 @@
   /* podświetlenie zaznaczonego punktu (kliknięcie na liście lub na mapie) */
   .leaflet-marker-icon.poi-highlight{filter:drop-shadow(0 0 4px #fff) drop-shadow(0 0 14px var(--accent)) brightness(1.3)!important;animation:poiHighlightPulse .85s ease-in-out 3;z-index:9997!important}
   @keyframes poiHighlightPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.3)}}
-  .poiItem.hl-frame{box-shadow:0 0 0 3px var(--accent) inset;border-color:var(--accent);transition:box-shadow .2s,border-color .2s}
-  .stop.hl-frame{box-shadow:0 0 0 3px var(--accent) inset;border-radius:var(--r-sm);transition:box-shadow .2s}
+  .poiItem.hl-frame{background:var(--accent-soft);border-color:var(--accent);transition:background .2s,border-color .2s}
+  .stop.hl-frame{background:var(--accent-soft);border-radius:var(--r-sm);transition:background .2s}
   /* płynne rozsuwanie stłoczonych pinezek pod kursorem */
   .leaflet-marker-icon.poi-spreadable{transition:transform .2s cubic-bezier(.2,.8,.3,1)}
 </style>
