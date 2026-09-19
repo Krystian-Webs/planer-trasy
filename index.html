@@ -362,6 +362,7 @@
   @keyframes poiHighlightPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.3)}}
   .poiItem.flash{animation:poiFlash 1.4s ease}
   @keyframes poiFlash{0%{background:var(--accent-soft);border-color:var(--accent)}70%{background:var(--accent-soft);border-color:var(--accent)}100%{background:var(--panel-2);border-color:var(--line)}}
+  .stop.flash{animation:poiFlash 1.4s ease;border-radius:var(--r-sm)}
   /* płynne rozsuwanie stłoczonych pinezek pod kursorem */
   .leaflet-marker-icon.poi-spreadable{transition:transform .2s cubic-bezier(.2,.8,.3,1)}
 </style>
@@ -798,6 +799,28 @@ document.addEventListener("mousedown",e=>{if(acInput&&e.target!==acInput&&!$("ac
 
 function stopLabel(i){if(stops.length<=1||i===0)return["Start","#33c27a"];if(i===stops.length-1)return["Meta","#eef3f8"];return["Przystanek "+i,"#ff6b1a"];}
 let insertAfterStopId=null;
+function highlightStop(s){
+  if(s&&s.marker){
+    const el=s.marker.getElement();
+    if(el){
+      el.classList.remove("poi-highlight");
+      void el.offsetWidth;
+      el.classList.add("poi-highlight");
+      clearTimeout(s._hlT);
+      s._hlT=setTimeout(()=>{try{el.classList.remove("poi-highlight");}catch(e){}},2600);
+    }
+  }
+  const idx=stops.indexOf(s);
+  const rows=document.querySelectorAll("#stopsList .stop");
+  const row=rows[idx];
+  if(row){
+    row.classList.remove("flash");
+    void row.offsetWidth;
+    row.classList.add("flash");
+    row.scrollIntoView({behavior:"smooth",block:"center"});
+    setTimeout(()=>{try{row.classList.remove("flash");}catch(e){}},1500);
+  }
+}
 function makeStopMarker(s){
   s.marker=L.marker(s.latlng,{draggable:true}).addTo(map);
   s.marker.on("dragend",async()=>{
@@ -807,6 +830,7 @@ function makeStopMarker(s){
     rebuildRoute();
   });
   s.marker.on("click",()=>{
+    highlightStop(s);
     const idx=stops.indexOf(s);
     const lab=stopLabel(idx)[0];
     const div=document.createElement("div");
@@ -1343,6 +1367,7 @@ function renderPoiList(){const el=$("poiList");buildPoiFilterChips();if(pois.len
     item.addEventListener("dragover",ev=>{if(dragPoiId==null)return;const dragged=pois.find(x=>x.id===dragPoiId);if(!dragged||dragged.type!==p.type)return;ev.preventDefault();item.classList.add("drag-over");});
     item.addEventListener("dragleave",()=>{item.classList.remove("drag-over");});
     item.addEventListener("drop",ev=>{ev.preventDefault();item.classList.remove("drag-over");if(dragPoiId==null)return;reorderPoiDrop(dragPoiId,p.id);dragPoiId=null;});
+    item.addEventListener("mouseenter",()=>{highlightPoi(p);});
     item.querySelector(".head").onclick=ev=>{if(ev.target.classList.contains("poi-up")||ev.target.classList.contains("poi-dn")||ev.target.classList.contains("drag-handle"))return;if(ev.target.classList.contains("del")){map.removeLayer(p.marker);pois=pois.filter(x=>x.id!==p.id);renderPoiList();updateStats();return;}item.classList.toggle("open");if(item.classList.contains("open")){map.panTo(p.latlng);highlightPoi(p);}};const ni=item.querySelector("input"),ta=item.querySelector("textarea");ni.oninput=()=>{p.name=ni.value;item.querySelector(".nm").textContent=p.name||def;};ta.oninput=()=>{p.note=ta.value;};const volNumInp=item.querySelector(".vol-num"),volNameInp=item.querySelector(".vol-name"),volConfirm=item.querySelector(".vol-confirm");const refreshVolConfirm=()=>{const okNum=(p.volNum||"").trim(),okName=(p.volName||"").trim();if(okNum&&okName){volConfirm.style.color="var(--good)";volConfirm.textContent="✓ Zapisano — nr "+okNum+", "+okName;}else if(okNum||okName){volConfirm.style.color="var(--accent-2)";volConfirm.textContent="⚠ Uzupełnij oba pola (numer i imię), żeby przypisanie się liczyło.";}else{volConfirm.textContent="";}};refreshVolConfirm();if(volNumInp)volNumInp.oninput=()=>{p.volNum=volNumInp.value;refreshVolConfirm();updateVolAssignedCount();};if(volNameInp)volNameInp.oninput=()=>{p.volName=volNameInp.value;refreshVolConfirm();updateVolAssignedCount();};el.appendChild(item);});});if(!anyVisible)el.innerHTML='<div class="empty">Wszystkie punkty są odfiltrowane — włącz je w filtrze powyżej.</div>';applyPoiVisibility();}
 function openEditor(id){const item=document.querySelector(`.poiItem[data-id="${id}"]`);if(item){$("panel").classList.remove("collapsed");item.classList.add("open");item.scrollIntoView({behavior:"smooth",block:"center"});}}
 
