@@ -276,14 +276,16 @@
   #volCard .volMapsBtn{display:flex;align-items:center;justify-content:center;gap:8px;background:linear-gradient(135deg,var(--accent-2),var(--accent));color:#fff;text-decoration:none;font:700 15px var(--font);padding:14px;border-radius:12px;box-shadow:0 6px 20px rgba(255,107,26,.35)}
   #volGateOverlay{display:none;position:fixed;inset:0;z-index:5700;background:rgba(5,8,12,.8);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);align-items:center;justify-content:center;padding:18px}
   #volGateOverlay.show{display:flex}
-  body.embed-mode .leaflet-tile-pane,
-  body.viewer-mode .leaflet-tile-pane{filter:grayscale(1) brightness(.82) contrast(1.12);-webkit-filter:grayscale(1) brightness(.82) contrast(1.12)}
+  body.embed-mode .leaflet-tile-pane .leaflet-tile,
+  body.viewer-mode .leaflet-tile-pane .leaflet-tile{filter:grayscale(1) brightness(.82) contrast(1.12);-webkit-filter:grayscale(1) brightness(.82) contrast(1.12)}
   body.embed-mode .leaflet-overlay-pane,
   body.viewer-mode .leaflet-overlay-pane{opacity:0!important}
   body:not(.embed-mode):not(.viewer-mode):not(.volunteer-mode) .leaflet-overlay-pane{opacity:1!important}
   body:not(.embed-mode):not(.viewer-mode):not(.volunteer-mode) .leaflet-marker-pane{display:block!important}
-  .anim-marker{width:26px;height:26px;border-radius:50%;background:#ff6b1a;border:3px solid #fff;box-shadow:0 0 0 8px rgba(255,107,26,.28),0 3px 12px rgba(0,0,0,.5);animation:animPulse 1.2s ease-in-out infinite}
-  @keyframes animPulse{0%,100%{box-shadow:0 0 0 8px rgba(255,107,26,.28),0 3px 12px rgba(0,0,0,.5)}50%{box-shadow:0 0 0 14px rgba(255,107,26,.14),0 3px 12px rgba(0,0,0,.5)}}
+  .anim-wrap{position:relative;width:26px;height:26px}
+  .anim-ring{position:absolute;inset:-11px;border-radius:50%;background:rgba(255,107,26,.32);animation:animRing 1.2s ease-in-out infinite;will-change:transform,opacity}
+  .anim-marker{position:absolute;inset:0;border-radius:50%;background:#ff6b1a;border:3px solid #fff;box-shadow:0 3px 12px rgba(0,0,0,.5)}
+  @keyframes animRing{0%,100%{transform:scale(.8);opacity:.95}50%{transform:scale(1.2);opacity:.45}}
   body.embed-mode{background:#000!important}
   body.embed-mode #panel,body.embed-mode #searchWrap,body.embed-mode #adminBanner,body.embed-mode #viewerHud,body.embed-mode #viewerPlayBtn,body.embed-mode #toast,body.embed-mode #embedTitle{display:none!important}
   body.embed-mode .leaflet-marker-pane{display:none!important}
@@ -295,11 +297,12 @@
   body.embed-mode .leaflet-overlay-pane{opacity:.10}
   .leaflet-anim-pane{z-index:650!important;pointer-events:none}
   .leaflet-reveal-pane{z-index:460!important;pointer-events:none;opacity:1!important}
-  .leaflet-reveal-pane path{filter:drop-shadow(0 0 3px #fbbf24) drop-shadow(0 0 8px rgba(251,191,36,.75))}
+  .leaflet-anim-pane .leaflet-marker-icon{will-change:transform}
   .map-dark-veil{position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.90);z-index:250;pointer-events:none}
   body.embed-mode .anim-marker,
-  body.viewer-mode .anim-marker{background:#fbbf24;border:3px solid #fff;box-shadow:0 0 0 10px rgba(251,191,36,.35),0 0 24px #fbbf24,0 0 44px rgba(251,191,36,.65),0 3px 12px rgba(0,0,0,.9);animation:animPulseYellow 1.2s ease-in-out infinite}
-  @keyframes animPulseYellow{0%,100%{box-shadow:0 0 0 10px rgba(251,191,36,.35),0 0 24px #fbbf24,0 0 44px rgba(251,191,36,.65),0 3px 12px rgba(0,0,0,.9)}50%{box-shadow:0 0 0 16px rgba(251,191,36,.20),0 0 32px #fbbf24,0 0 56px rgba(251,191,36,.85),0 3px 12px rgba(0,0,0,.9)}}
+  body.viewer-mode .anim-marker{background:#fbbf24;box-shadow:0 0 18px #fbbf24,0 0 34px rgba(251,191,36,.6),0 3px 12px rgba(0,0,0,.9)}
+  body.embed-mode .anim-ring,
+  body.viewer-mode .anim-ring{background:rgba(251,191,36,.42)}
   #embedHeader{display:none;position:fixed;top:calc(18px + var(--sat));left:0;right:0;z-index:1500;text-align:center;pointer-events:none;padding:0 14px}
   body.embed-mode #embedHeader{display:block}
   #embedHeader .brand{height:64px;width:auto;max-width:75%;object-fit:contain;filter:drop-shadow(0 4px 14px rgba(0,0,0,.75)) drop-shadow(0 0 6px rgba(0,0,0,.9))}
@@ -343,6 +346,7 @@
   #zoomSliderWrap{position:fixed;top:calc(120px + var(--sat));right:14px;z-index:1150;background:var(--panel);border:1px solid var(--line-soft);border-radius:14px;padding:10px 8px 12px;box-shadow:var(--shadow);display:flex;flex-direction:column;align-items:center;gap:6px;width:44px}
   #zoomVal{font:700 10.5px var(--font);color:var(--ink-dim);font-variant-numeric:tabular-nums}
   #zoomSliderWrap input[type="range"]{writing-mode:vertical-lr;direction:rtl;width:22px;height:150px;accent-color:var(--accent);cursor:pointer}
+  body.viewer-mode #zoomSliderWrap,body.embed-mode #zoomSliderWrap,body.volunteer-mode #zoomSliderWrap{display:none!important}
   body.clean-preview #panel,body.clean-preview #searchWrap,body.clean-preview #adminBanner{display:none!important}
   #cleanPreviewExit{display:none;position:fixed;top:calc(14px + var(--sat));left:14px;z-index:1600;background:var(--panel-solid);border:1px solid var(--line);color:var(--ink);padding:11px 16px;border-radius:99px;font:700 13px var(--font);cursor:pointer;box-shadow:var(--shadow)}
   body.clean-preview #cleanPreviewExit{display:block}
@@ -1387,8 +1391,8 @@ map.on("mousemove",e=>{
   if(d>activeSpread.r+45)collapseActiveSpread();
 });
 map.getContainer().addEventListener("mouseleave",()=>collapseActiveSpread());
-map.on("movestart zoomstart",()=>collapseActiveSpread());
-map.on("zoomend moveend",()=>computeClusters());
+map.on("movestart zoomstart",()=>{if(activeSpread)collapseActiveSpread();});
+map.on("zoomend moveend",()=>{if(!mapAnim.rafId)computeClusters();});
 
 function addPoi(type,latlng,name,silent){const id=idSeq++;const obj={id,type,latlng,name:name||"",note:""};obj.marker=L.marker(latlng,{icon:poiIcon(type),draggable:true}).addTo(map);obj._iconKey=type+"|";attachSpreadHover(obj);obj.marker.on("dragstart",()=>{poiDragging=true;});obj.marker.on("dragend",()=>{poiDragging=false;obj.latlng=obj.marker.getLatLng();if(activeSpread&&activeSpread.group.includes(obj)){activeSpread.group.forEach(x=>{if(x!==obj&&x.marker){x.marker.setLatLng(x.latlng);x.marker.setZIndexOffset(0);}});obj.marker.setZIndexOffset(0);activeSpread=null;}renderPoiList();});obj.marker.on("click",()=>{openEditor(id);highlightPoi(obj);});pois.push(obj);if(!silent){renderPoiList();updateStats();}return obj;}
 function flipAnimateRender(renderFn){
@@ -2900,7 +2904,7 @@ function playOnMap(mode){
   if(mapAnim.marker){ map.removeLayer(mapAnim.marker); }
   mapAnim.marker=L.marker([path[0].lat,path[0].lng],{
     pane:"anim",
-    icon:L.divIcon({className:"",iconSize:[26,26],iconAnchor:[13,13],html:'<div class="anim-marker"></div>'}),
+    icon:L.divIcon({className:"",iconSize:[26,26],iconAnchor:[13,13],html:'<div class="anim-wrap"><div class="anim-ring"></div><div class="anim-marker"></div></div>'}),
     interactive:false, zIndexOffset:10000
   }).addTo(map);
   if(mode==="embed" || mode==="viewer"){
@@ -2911,8 +2915,15 @@ function playOnMap(mode){
     }
     ensureRevealPane();
     if(mapAnim.revealLine){ map.removeLayer(mapAnim.revealLine); }
+    if(mapAnim.revealGlow){ map.removeLayer(mapAnim.revealGlow); }
+    if(!mapAnim.revealRenderer) mapAnim.revealRenderer=L.svg({pane:"reveal",padding:2});
+    mapAnim.revealGlow=L.polyline([[path[0].lat,path[0].lng]],{
+      pane:"reveal", renderer:mapAnim.revealRenderer, interactive:false,
+      color:"#fbbf24", weight:14, opacity:.28,
+      lineCap:"round", lineJoin:"round"
+    }).addTo(map);
     mapAnim.revealLine=L.polyline([[path[0].lat,path[0].lng]],{
-      pane:"reveal",
+      pane:"reveal", renderer:mapAnim.revealRenderer, interactive:false,
       color:"#fbbf24", weight:5, opacity:1,
       lineCap:"round", lineJoin:"round"
     }).addTo(map);
@@ -2929,7 +2940,7 @@ function playOnMap(mode){
   const btn=$("playRouteBtn"); if(btn){ if(!btn.dataset.orig)btn.dataset.orig=btn.textContent; btn.textContent="⏹ Zatrzymaj"; }
   const vbtn=$("viewerPlayBtn"); if(vbtn){ if(!vbtn.dataset.orig)vbtn.dataset.orig=vbtn.textContent; vbtn.textContent="⏹ Zatrzymaj"; vbtn.classList.add("playing"); }
   const ebtn=$("embedPlayBtn"); if(ebtn){ ebtn.textContent="⏸"; }
-  let lastPan=0;
+  let lastMoveEnd=0;
   function step(now){
     if(mapAnim.rafId===null) return;
     const elapsed=now-mapAnim.startedAt;
@@ -2945,9 +2956,19 @@ function playOnMap(mode){
       }
       rp.push(L.latLng(pos.lat,pos.lng));
       mapAnim.revealLine.setLatLngs(rp);
+      if(mapAnim.revealGlow) mapAnim.revealGlow.setLatLngs(rp);
       rp.pop();
-      // przesuwanie mapy za pinezką ~15× na sekundę zamiast co klatkę (płynniej, mniej obciąża)
-      if(now-lastPan>66){ lastPan=now; try{ map.panTo([pos.lat,pos.lng],{animate:false,noMoveStart:true}); }catch(e){} }
+      // POPRAWKA: kamera jedzie za pinezką w każdej klatce, o pełne piksele, bez pełnego przerysowania mapy.
+      // Ciężkie odświeżenie (kafle, linie) tylko co 0,5 s — dzięki temu kółko sunie płynnie zamiast mrugać.
+      try{
+        const tp=map.latLngToContainerPoint([pos.lat,pos.lng]), sz=map.getSize();
+        const dx=Math.round(tp.x-sz.x/2), dy=Math.round(tp.y-sz.y/2);
+        if(dx||dy){
+          if(typeof map._rawPanBy==="function"){ map._rawPanBy(L.point(dx,dy)); map.fire("move"); }
+          else map.panBy([dx,dy],{animate:false});
+        }
+        if(now-lastMoveEnd>500){ lastMoveEnd=now; map.fire("moveend"); }
+      }catch(e){}
     }
     if(db){
       const cur=(dist/1000).toFixed(2).replace(".",",");
@@ -2981,7 +3002,7 @@ function playOnMap(mode){
         mapAnim.loopT=setTimeout(()=>{
           mapAnim.loopT=null;
           if(!mapAnim.rafId && document.body.classList.contains("embed-mode")){
-            if(mapAnim.revealLine){ map.removeLayer(mapAnim.revealLine); mapAnim.revealLine=null; }
+            if(mapAnim.revealLine){ map.removeLayer(mapAnim.revealLine); mapAnim.revealLine=null; } if(mapAnim.revealGlow){ map.removeLayer(mapAnim.revealGlow); mapAnim.revealGlow=null; }
             playOnMap(mode);
           }
         }, 1500);
@@ -2992,7 +3013,7 @@ function playOnMap(mode){
         setTimeout(()=>{
           if(mapAnim.rafId)return;
           if(mapAnim.marker){ map.removeLayer(mapAnim.marker); mapAnim.marker=null; }
-          if(mapAnim.revealLine){ map.removeLayer(mapAnim.revealLine); mapAnim.revealLine=null; }
+          if(mapAnim.revealLine){ map.removeLayer(mapAnim.revealLine); mapAnim.revealLine=null; } if(mapAnim.revealGlow){ map.removeLayer(mapAnim.revealGlow); mapAnim.revealGlow=null; }
           if(db) db.textContent=mapAnim.origBadge;
           updateStats();
           if(mode==="viewer" && typeof viewerUpdateMeta==="function") viewerUpdateMeta();
@@ -3007,7 +3028,7 @@ function stopOnMap(){
   if(mapAnim.loopT){ clearTimeout(mapAnim.loopT); mapAnim.loopT=null; }
   mapAnim.loop=false;
   if(mapAnim.marker){ map.removeLayer(mapAnim.marker); mapAnim.marker=null; }
-  if(mapAnim.revealLine){ map.removeLayer(mapAnim.revealLine); mapAnim.revealLine=null; }
+  if(mapAnim.revealLine){ map.removeLayer(mapAnim.revealLine); mapAnim.revealLine=null; } if(mapAnim.revealGlow){ map.removeLayer(mapAnim.revealGlow); mapAnim.revealGlow=null; }
   if(mapAnim.darkVeil && !document.body.classList.contains("embed-mode")){ mapAnim.darkVeil.remove(); mapAnim.darkVeil=null; }
   const btn=$("playRouteBtn"); if(btn) btn.textContent=btn.dataset.orig||"▶️ Odtwórz trasę na mapie";
   const vbtn=$("viewerPlayBtn"); if(vbtn){ vbtn.textContent=vbtn.dataset.orig||"▶ Odtwórz trasę"; vbtn.classList.remove("playing"); }
